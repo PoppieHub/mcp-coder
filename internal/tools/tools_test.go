@@ -79,6 +79,39 @@ func TestFallbackSearchSkipsSecretsAndFindsCode(t *testing.T) {
 	}
 }
 
+func TestFastPathSearchHidesSecretsAndFindsCode(t *testing.T) {
+	d := t.TempDir()
+	if err := os.WriteFile(filepath.Join(d, "app.go"), []byte("package app\n// SEARCH_NEEDLE\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(d, "credentials.json"), []byte("SECRET_BENCHMARK_VALUE"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	r := Runner{Root: d, MaxFile: 1024, MaxOutput: 1024, CommandTimeout: time.Second}
+
+	list, err := r.ListFiles(context.Background(), "")
+	if err != nil || strings.Contains(list, "credentials.json") || !strings.Contains(list, "app.go") {
+		t.Fatalf("ListFiles leak secrets or missing app.go: %q %v", list, err)
+	}
+
+	files, err := r.SearchFiles(context.Background(), "app")
+	if err != nil || files != "app.go" {
+		t.Fatalf("SearchFiles: %q %v", files, err)
+	}
+	if files, err = r.SearchFiles(context.Background(), "credential"); err != nil || strings.Contains(files, "credentials.json") {
+		t.Fatalf("SearchFiles leaked credentials: %q %v", files, err)
+	}
+
+	code, err := r.SearchCode(context.Background(), "SECRET_BENCHMARK_VALUE")
+	if err != nil || strings.Contains(code, "credentials.json") || strings.Contains(code, "SECRET_BENCHMARK_VALUE") {
+		t.Fatalf("SearchCode leaked secret value: %q %v", code, err)
+	}
+	code, err = r.SearchCode(context.Background(), "SEARCH_NEEDLE")
+	if err != nil || !strings.Contains(code, "app.go") || strings.Contains(code, "credentials.json") {
+		t.Fatalf("SearchCode failed to find app.go or leaked secrets: %q %v", code, err)
+	}
+}
+
 func TestGitVerificationAndLimitedBuffer(t *testing.T) {
 	d := t.TempDir()
 	if err := os.WriteFile(filepath.Join(d, "go.mod"), []byte("module example.test/check\n\ngo 1.27\n"), 0644); err != nil {

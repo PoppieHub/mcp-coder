@@ -44,12 +44,12 @@ func (r Runner) search(ctx context.Context, args []string, q string) (string, er
 		var b limited
 		b.n = r.MaxOutput
 		c.Stdout = &b
-		c.Stderr = &b
+		c.Stderr = io.Discard
 		e = c.Run()
 		if e != nil && c.ProcessState.ExitCode() != 1 {
 			return "", e
 		}
-		return trunc(b.String(), r.MaxOutput), nil
+		return trunc(filterSecretLines(b.String(), args), r.MaxOutput), nil
 	}
 	var out []string
 	codeSearch := len(args) > 0 && args[0] == "-n"
@@ -100,6 +100,27 @@ func (r Runner) search(ctx context.Context, args []string, q string) (string, er
 		e = nil
 	}
 	return strings.Join(out, "\n"), e
+}
+func filterSecretLines(out string, args []string) string {
+	codeSearch := len(args) > 0 && args[0] == "-n"
+	lines := strings.Split(out, "\n")
+	res := make([]string, 0, len(lines))
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		path := line
+		if codeSearch {
+			if i := strings.Index(line, ":"); i >= 0 {
+				path = line[:i]
+			}
+		}
+		if security.IsSecretPath(path) {
+			continue
+		}
+		res = append(res, line)
+	}
+	return strings.Join(res, "\n")
 }
 func (r Runner) ReadFile(path string) (string, error) {
 	p, e := security.ResolveSafePath(r.Root, path, false)
