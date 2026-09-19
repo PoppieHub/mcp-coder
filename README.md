@@ -26,6 +26,17 @@ MCP_LLM_MODEL=coder-mini ./mcp-coder
 claude mcp add mcp-coder --env MCP_LLM_TOKEN --env MCP_LLM_BASE_URL --env MCP_LLM_MODEL -- /absolute/path/mcp-coder
 ```
 
+## Claude Desktop
+
+Для установки через UI Claude Desktop соберите локальное macOS-расширение DXT:
+
+```bash
+chmod +x scripts/package-claude-dxt.sh
+scripts/package-claude-dxt.sh
+```
+
+Появится `dist/mcp-coder.dxt`. В Claude Desktop откройте **Settings → Extensions → Advanced settings → Install Extension…**, выберите этот файл и введите токен в показанной форме. Токен отмечен как sensitive и не включается в архив. Расширение собирается под текущую архитектуру macOS; для другого Mac создайте архив на нём заново.
+
 ## Codex
 
 Добавьте stdio MCP server в конфигурацию Codex (точный интерфейс настройки зависит от клиента):

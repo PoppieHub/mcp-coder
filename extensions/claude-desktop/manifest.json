@@ -1,0 +1,97 @@
+{
+  "dxt_version": "0.1",
+  "name": "mcp-coder",
+  "display_name": "mcp-coder",
+  "version": "0.1.0",
+  "description": "Local coding executor for Claude Desktop.",
+  "long_description": "mcp-coder delegates narrow, verified coding tasks to a configured Anthropic Messages-compatible model. Claude remains responsible for planning and review.",
+  "author": {
+    "name": "mcp-coder"
+  },
+  "server": {
+    "type": "binary",
+    "entry_point": "bin/mcp-coder",
+    "mcp_config": {
+      "command": "${__dirname}/bin/mcp-coder",
+      "args": [],
+      "env": {
+        "MCP_LLM_TOKEN": "${user_config.llm_token}",
+        "MCP_LLM_BASE_URL": "${user_config.base_url}",
+        "MCP_LLM_MODEL": "${user_config.model}",
+        "MCP_MAX_AGENT_STEPS": "${user_config.max_agent_steps}",
+        "MCP_MAX_TOTAL_CONTEXT_CHARS": "${user_config.max_total_context_chars}",
+        "MCP_MAX_OUTPUT_TOKENS": "${user_config.max_output_tokens}",
+        "MCP_REQUEST_TIMEOUT_MS": "${user_config.request_timeout_ms}",
+        "MCP_COMMAND_TIMEOUT_MS": "${user_config.command_timeout_ms}"
+      }
+    }
+  },
+  "tools_generated": true,
+  "keywords": ["coding", "mcp", "developer-tools"],
+  "compatibility": {
+    "platforms": ["darwin"]
+  },
+  "user_config": {
+    "llm_token": {
+      "type": "string",
+      "title": "LLM token",
+      "description": "Token for the configured Anthropic Messages-compatible API.",
+      "sensitive": true,
+      "required": true
+    },
+    "base_url": {
+      "type": "string",
+      "title": "LLM base URL",
+      "description": "Base URL of the compatible API, without a trailing slash.",
+      "default": "https://llm.wb.ru/api",
+      "required": true
+    },
+    "model": {
+      "type": "string",
+      "title": "Model",
+      "description": "Model identifier passed to the API.",
+      "default": "coder-medium",
+      "required": true
+    },
+    "max_agent_steps": {
+      "type": "number",
+      "title": "Maximum agent steps",
+      "description": "Maximum tool-use iterations per coding task.",
+      "default": 24,
+      "min": 1,
+      "max": 50
+    },
+    "max_total_context_chars": {
+      "type": "number",
+      "title": "Maximum context characters",
+      "description": "Combined context budget for a coding task.",
+      "default": 160000,
+      "min": 4096,
+      "max": 1000000
+    },
+    "max_output_tokens": {
+      "type": "number",
+      "title": "Maximum output tokens",
+      "description": "Output-token budget for each model call.",
+      "default": 3000,
+      "min": 128,
+      "max": 16000
+    },
+    "request_timeout_ms": {
+      "type": "number",
+      "title": "API timeout (ms)",
+      "description": "Timeout for a model API request.",
+      "default": 60000,
+      "min": 1000,
+      "max": 600000
+    },
+    "command_timeout_ms": {
+      "type": "number",
+      "title": "Command timeout (ms)",
+      "description": "Timeout for an allowed verification command.",
+      "default": 60000,
+      "min": 1000,
+      "max": 600000
+    }
+  }
+}
