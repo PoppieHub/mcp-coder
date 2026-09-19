@@ -24,7 +24,7 @@ func TestLoadAndValidate(t *testing.T) {
 
 func TestInvalidLimitsUseDefaults(t *testing.T) {
 	t.Setenv("MCP_MAX_AGENT_STEPS", "999")
-	if got := Load().MaxSteps; got != 12 {
+	if got := Load().MaxSteps; got != 16 {
 		t.Fatalf("got %d", got)
 	}
 }

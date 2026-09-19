@@ -36,6 +36,23 @@ func TestReadAndEditLimits(t *testing.T) {
 	}
 }
 
+func TestCreateFileIsSafeAndDoesNotOverwrite(t *testing.T) {
+	d := t.TempDir()
+	r := Runner{Root: d, MaxOutput: 100}
+	if _, err := r.CreateFile("new.go", "package test\n"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(filepath.Join(d, "new.go")); err != nil || string(got) != "package test\n" {
+		t.Fatalf("%q %v", got, err)
+	}
+	if _, err := r.CreateFile("new.go", "overwrite"); err == nil {
+		t.Fatal("overwrite allowed")
+	}
+	if _, err := r.CreateFile(".env", "secret"); err == nil {
+		t.Fatal("secret creation allowed")
+	}
+}
+
 func TestFallbackSearchSkipsSecretsAndFindsCode(t *testing.T) {
 	t.Setenv("PATH", "")
 	d := t.TempDir()

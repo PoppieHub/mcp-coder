@@ -135,6 +135,18 @@ func (r Runner) EditFile(path, old, new string) (string, error) {
 	changed := strings.Replace(string(b), old, new, 1)
 	return "обновлено", atomic(p, []byte(changed), 0644)
 }
+func (r Runner) CreateFile(path, content string) (string, error) {
+	p, e := security.ResolveSafePath(r.Root, path, true)
+	if e != nil {
+		return "", e
+	}
+	if _, e := os.Lstat(p); e == nil {
+		return "", fmt.Errorf("файл уже существует")
+	} else if !os.IsNotExist(e) {
+		return "", e
+	}
+	return "создано", atomic(p, []byte(content), 0644)
+}
 func atomic(p string, data []byte, mode os.FileMode) error {
 	d := filepath.Dir(p)
 	f, e := os.CreateTemp(d, ".mcp-coder-*")

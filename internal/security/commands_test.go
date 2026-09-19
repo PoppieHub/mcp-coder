@@ -12,3 +12,14 @@ func TestVerificationAllowlist(t *testing.T) {
 		}
 	}
 }
+
+func TestVerificationAllowsSafeScopedGoTest(t *testing.T) {
+	if err := ValidateVerification([]string{"go", "test", "./internal/tools"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"go", "test", "../outside"}, {"go", "test", "./internal/../secret"}, {"go", "test", "./internal/tools;whoami"}} {
+		if err := ValidateVerification(args); err == nil {
+			t.Fatalf("unsafe command allowed: %q", args)
+		}
+	}
+}

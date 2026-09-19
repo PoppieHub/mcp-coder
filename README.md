@@ -16,7 +16,7 @@ MCP_LLM_MODEL=coder ./mcp-coder
 MCP_LLM_MODEL=coder-mini ./mcp-coder
 ```
 
-Доступные ограничения: `MCP_MAX_AGENT_STEPS` (12), `MCP_MAX_INPUT_CHARS` (12000), `MCP_MAX_FILE_CHARS` (24000), `MCP_MAX_TOTAL_CONTEXT_CHARS` (100000), `MCP_MAX_OUTPUT_TOKENS` (1600), `MCP_REQUEST_TIMEOUT_MS` (60000) и `MCP_COMMAND_TIMEOUT_MS` (60000).
+Доступные ограничения: `MCP_MAX_AGENT_STEPS` (16), `MCP_MAX_INPUT_CHARS` (12000), `MCP_MAX_FILE_CHARS` (24000), `MCP_MAX_TOTAL_CONTEXT_CHARS` (100000), `MCP_MAX_OUTPUT_TOKENS` (1600), `MCP_REQUEST_TIMEOUT_MS` (60000) и `MCP_COMMAND_TIMEOUT_MS` (60000).
 
 ## Claude Code
 
@@ -40,7 +40,9 @@ MCP_LLM_BASE_URL = "https://llm.corp.ru/api"
 MCP_LLM_MODEL = "coder-medium"
 ```
 
-`execute_coding_task` предназначен для реализации задачи, а `ask_coder` — для коротких запросов только на чтение. После существенной задачи проверяйте `git diff` основной моделью.
+`execute_coding_task` предназначен для реализации задачи, а `ask_coder` — для коротких запросов только на чтение. По умолчанию coding-задача не может завершиться успешно без наблюдаемого изменения файла, успешной проверки и tool-вызова `finalize`. Для исследовательской задачи укажите `readOnly: true`; при необходимости контракт можно явно уточнить полями `requireChanges`, `requireVerification` и `allowedChangePaths`.
+
+У исполнителя есть безопасные `create_file` и `edit_file`, а также `run_go_test` для одного относительного Go-пакета (`./internal/tools`) или всего модуля (`./...`). Произвольный shell по-прежнему недоступен.
 
 `execute_coding_task` дополнительно принимает необязательный `projectContext`: краткий hint основной модели, например запрет на legacy-подход. Он не заменяет самостоятельное исследование проекта. Перед изменением executor обнаруживает только известные instruction-файлы (`AGENTS.md`, `CLAUDE.md`, `CONTRIBUTING.md` и релевантные README), учитывает вложенные правила по пути suggested files и передаёт модели небольшой список соседних файлов для поиска уже существующих patterns. Явные constraints задачи имеют приоритет над `projectContext`, затем применяются instructions и локальный код.
 
