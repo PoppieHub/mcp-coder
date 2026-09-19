@@ -79,6 +79,22 @@ func TestHumanReviewReturnsPlanWithoutChanges(t *testing.T) {
 		t.Fatalf("planning tools: %+v", got)
 	}
 }
+func TestHumanReviewPlanningRejectsWriteToolWithoutAwaitingApproval(t *testing.T) {
+	d := t.TempDir()
+	f := &scriptedLLM{responses: []llm.Response{
+		{Content: []llm.Block{{Type: "tool_use", ID: "1", Name: "create_file", Input: []byte(`{"path":"x.go","content":"package x\n"}`)}}},
+	}}
+	c := config.Load()
+	c.Model, c.MaxSteps, c.MaxInputChars, c.MaxOutputTokens = "x", 2, 100, 100
+	r := Loop{C: c, LLM: f, Tools: tools.Runner{Root: d, MaxOutput: 100}}.Execute(context.Background(), Input{Task: "x", HumanReview: true})
+	if r.Status != "failed" {
+		t.Fatalf("humanReview planning must reject a write tool: %+v", r)
+	}
+	if _, err := os.Stat(filepath.Join(d, "x.go")); !os.IsNotExist(err) {
+		t.Fatalf("humanReview planning changed a file: %v", err)
+	}
+}
+
 func TestAgentStepLimit(t *testing.T) {
 	f := &fakeLLM{response: llm.Response{Content: []llm.Block{{Type: "tool_use", ID: "1", Name: "get_git_status", Input: []byte(`{}`)}}}}
 	c := config.Load()
