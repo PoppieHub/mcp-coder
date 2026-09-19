@@ -6,7 +6,7 @@
 
 ```bash
 go build -trimpath -o mcp-coder ./cmd/mcp-coder
-MCP_LLM_TOKEN='…' MCP_LLM_BASE_URL='https://llm.wb.ru/api' MCP_LLM_MODEL=coder-medium ./mcp-coder doctor
+MCP_LLM_TOKEN='…' MCP_LLM_BASE_URL='https://llm.corp.ru/api' MCP_LLM_MODEL=coder-medium ./mcp-coder doctor
 ```
 
 Процессу необходимы `MCP_LLM_TOKEN`, `MCP_LLM_BASE_URL` и `MCP_LLM_MODEL`. Запросы направляются на `${MCP_LLM_BASE_URL}/v1/messages`; название модели не зашито в код. Для переключения модели пересборка не нужна:
@@ -36,7 +36,7 @@ command = "/absolute/path/mcp-coder"
 
 [mcp_servers.mcp-coder.env]
 MCP_LLM_TOKEN = "..."
-MCP_LLM_BASE_URL = "https://llm.wb.ru/api"
+MCP_LLM_BASE_URL = "https://llm.corp.ru/api"
 MCP_LLM_MODEL = "coder-medium"
 ```
 
