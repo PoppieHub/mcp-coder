@@ -1,0 +1,7 @@
+mcp-coder
+.vscode/
+.idea/
+*.iml
+.env
+.env.*
+.DS_Store
