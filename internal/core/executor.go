@@ -55,7 +55,7 @@ func (e CodingExecutor) ExecuteCodingTask(ctx context.Context, in agent.Input) (
 		}
 	}
 	r := agent.Loop{C: e.Config, LLM: client(e.Config), Tools: runner, PreExisting: base.Modified, Project: pc, Events: e.Events, TaskID: taskID}.Execute(ctx, in)
-	if r.Status == "completed" {
+	if r.Status == "completed" || r.Status == "ready_for_review" || r.Status == "awaiting_approval" {
 		events.Emit(e.Events, events.TaskCompleted, taskID, "задача выполнена")
 	} else {
 		events.Emit(e.Events, events.TaskFailed, taskID, r.Summary)

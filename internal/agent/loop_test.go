@@ -60,6 +60,25 @@ func TestAgentPromptsAfterThreeExplorationSteps(t *testing.T) {
 		t.Fatal("missing exploration recovery prompt")
 	}
 }
+
+func TestHumanReviewReturnsPlanWithoutChanges(t *testing.T) {
+	f := &scriptedLLM{responses: []llm.Response{
+		{Content: []llm.Block{{Type: "tool_use", ID: "plan", Name: "propose_plan", Input: []byte(`{"plan":"1. Добавить тест. 2. Исправить код.","plannedFiles":["x.go","x_test.go"],"verification":["go test ./..."],"risks":[]}`)}}},
+	}}
+	c := config.Load()
+	c.Model, c.MaxSteps, c.MaxInputChars, c.MaxOutputTokens = "x", 2, 100, 100
+	d := t.TempDir()
+	r := Loop{C: c, LLM: f, Tools: tools.Runner{Root: d, MaxOutput: 100}}.Execute(context.Background(), Input{Task: "x", HumanReview: true})
+	if r.Status != "awaiting_approval" || r.Plan == nil || len(r.Plan.PlannedFiles) != 2 || r.AgentSteps != 1 {
+		t.Fatalf("%+v", r)
+	}
+	if _, err := os.Stat(filepath.Join(d, "x.go")); !os.IsNotExist(err) {
+		t.Fatalf("plan mode changed a file: %v", err)
+	}
+	if got := f.requests[0].Tools; len(got) == 0 || got[len(got)-1].Name != "propose_plan" {
+		t.Fatalf("planning tools: %+v", got)
+	}
+}
 func TestAgentStepLimit(t *testing.T) {
 	f := &fakeLLM{response: llm.Response{Content: []llm.Block{{Type: "tool_use", ID: "1", Name: "get_git_status", Input: []byte(`{}`)}}}}
 	c := config.Load()
