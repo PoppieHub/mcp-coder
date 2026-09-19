@@ -3,5 +3,4 @@ mcp-coder
 .idea/
 *.iml
 .env
-.env.*
 .DS_Store
