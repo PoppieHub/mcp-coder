@@ -116,7 +116,15 @@ func (c *HTTPClient) Message(ctx context.Context, r Request) (Response, error) {
 		if ctx.Err() != nil {
 			return Response{}, ctx.Err()
 		}
-		time.Sleep(time.Duration(i+1) * 250 * time.Millisecond)
+		if i < 2 {
+			timer := time.NewTimer(time.Duration(i+1) * 250 * time.Millisecond)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				return Response{}, ctx.Err()
+			case <-timer.C:
+			}
+		}
 	}
 	return Response{}, last
 }

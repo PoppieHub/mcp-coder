@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestLoadAndValidate(t *testing.T) {
 	t.Setenv("MCP_LLM_TOKEN", "token")
@@ -29,5 +32,19 @@ func TestInvalidLimitsUseDefaults(t *testing.T) {
 	c := Load()
 	if c.MaxSteps != 48 || c.MaxTotalContextChars != 160000 || c.MaxOutputTokens != 3000 {
 		t.Fatalf("unexpected defaults: %+v", c)
+	}
+}
+
+func TestTaskTimeoutConfig(t *testing.T) {
+	for _, tc := range []struct {
+		value string
+		want  time.Duration
+	}{
+		{"", 10 * time.Minute}, {"invalid", 10 * time.Minute}, {"999", 10 * time.Minute}, {"3600001", 10 * time.Minute}, {"120000", 2 * time.Minute},
+	} {
+		t.Setenv("MCP_TASK_TIMEOUT_MS", tc.value)
+		if got := Load().TaskTimeout; got != tc.want {
+			t.Fatalf("%q: got %s want %s", tc.value, got, tc.want)
+		}
 	}
 }

@@ -22,6 +22,7 @@
         "MCP_MAX_TOTAL_CONTEXT_CHARS": "${user_config.max_total_context_chars}",
         "MCP_MAX_OUTPUT_TOKENS": "${user_config.max_output_tokens}",
         "MCP_REQUEST_TIMEOUT_MS": "${user_config.request_timeout_ms}",
+        "MCP_TASK_TIMEOUT_MS": "${user_config.task_timeout_ms}",
         "MCP_COMMAND_TIMEOUT_MS": "${user_config.command_timeout_ms}"
       }
     }
@@ -84,6 +85,14 @@
       "default": 60000,
       "min": 1000,
       "max": 600000
+    },
+    "task_timeout_ms": {
+      "type": "number",
+      "title": "Task timeout (ms)",
+      "description": "Total time budget for a coding task.",
+      "default": 600000,
+      "min": 1000,
+      "max": 3600000
     },
     "command_timeout_ms": {
       "type": "number",

@@ -2,6 +2,8 @@ package core
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"github.com/wb/mcp-coder/internal/agent"
 	"github.com/wb/mcp-coder/internal/config"
 	"github.com/wb/mcp-coder/internal/events"
@@ -25,6 +27,12 @@ type CodingExecutor struct {
 }
 
 func (e CodingExecutor) ExecuteCodingTask(ctx context.Context, in agent.Input) (agent.Result, error) {
+	timeout := e.Config.TaskTimeout
+	if timeout <= 0 {
+		timeout = 10 * time.Minute
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	if err := e.Config.ValidateLLM(); err != nil {
 		return agent.Result{Status: "failed", Summary: err.Error()}, nil
 	}
@@ -55,6 +63,12 @@ func (e CodingExecutor) ExecuteCodingTask(ctx context.Context, in agent.Input) (
 		}
 	}
 	r := agent.Loop{C: e.Config, LLM: client(e.Config), Tools: runner, PreExisting: base.Modified, Project: pc, Events: e.Events, TaskID: taskID}.Execute(ctx, in)
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		r.Status = "failed"
+		r.Summary = fmt.Sprintf("достигнут таймаут задачи (%s); уже выполненные изменения сохранены", timeout)
+	} else if ctx.Err() != nil {
+		r.Status, r.Summary = "failed", ctx.Err().Error()
+	}
 	if r.Status == "completed" || r.Status == "ready_for_review" || r.Status == "awaiting_approval" {
 		events.Emit(e.Events, events.TaskCompleted, taskID, "задача выполнена")
 	} else {

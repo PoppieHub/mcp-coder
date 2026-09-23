@@ -13,7 +13,7 @@ type Config struct {
 	BaseURL                                                                      string
 	Model                                                                        string
 	MaxSteps, MaxInputChars, MaxFileChars, MaxTotalContextChars, MaxOutputTokens int
-	RequestTimeout, CommandTimeout                                               time.Duration
+	RequestTimeout, CommandTimeout, TaskTimeout                                  time.Duration
 }
 
 func Load() Config {
@@ -21,6 +21,7 @@ func Load() Config {
 		Token: os.Getenv("MCP_LLM_TOKEN"), BaseURL: strings.TrimRight(os.Getenv("MCP_LLM_BASE_URL"), "/"), Model: os.Getenv("MCP_LLM_MODEL"),
 		MaxSteps: envInt("MCP_MAX_AGENT_STEPS", 48, 1, 50), MaxInputChars: envInt("MCP_MAX_INPUT_CHARS", 12000, 256, 100000),
 		MaxFileChars: envInt("MCP_MAX_FILE_CHARS", 24000, 1024, 200000), MaxTotalContextChars: envInt("MCP_MAX_TOTAL_CONTEXT_CHARS", 160000, 4096, 1000000),
+		TaskTimeout:     time.Duration(envInt("MCP_TASK_TIMEOUT_MS", 600000, 1000, 3600000)) * time.Millisecond,
 		MaxOutputTokens: envInt("MCP_MAX_OUTPUT_TOKENS", 3000, 128, 16000), RequestTimeout: time.Duration(envInt("MCP_REQUEST_TIMEOUT_MS", 60000, 1000, 600000)) * time.Millisecond, CommandTimeout: time.Duration(envInt("MCP_COMMAND_TIMEOUT_MS", 60000, 1000, 600000)) * time.Millisecond,
 	}
 }

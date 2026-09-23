@@ -69,3 +69,33 @@ func TestMessageHonorsCancellation(t *testing.T) {
 		t.Fatal("cancelled request succeeded")
 	}
 }
+
+func TestRetryBackoffHonorsCancellation(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	calls := 0
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer s.Close()
+	// Cancel during the 250ms retry delay, after the first response.
+	c := testClient(s)
+	c.HTTP.Transport = cancelAfterResponse{base: s.Client().Transport, cancel: cancel}
+	start := time.Now()
+	_, err := c.Message(ctx, Request{})
+	if err != context.Canceled || calls != 1 || time.Since(start) >= 250*time.Millisecond {
+		t.Fatalf("err=%v calls=%d elapsed=%s", err, calls, time.Since(start))
+	}
+}
+
+type cancelAfterResponse struct {
+	base   http.RoundTripper
+	cancel context.CancelFunc
+}
+
+func (t cancelAfterResponse) RoundTrip(r *http.Request) (*http.Response, error) {
+	res, err := t.base.RoundTrip(r)
+	time.AfterFunc(20*time.Millisecond, t.cancel)
+	return res, err
+}

@@ -175,3 +175,23 @@ func TestAgentRejectsInvalidTaskAndUnknownTool(t *testing.T) {
 		t.Fatal(res)
 	}
 }
+
+type cancelledResponseClient struct{ cancel context.CancelFunc }
+
+func (f cancelledResponseClient) Message(context.Context, llm.Request) (llm.Response, error) {
+	f.cancel()
+	return llm.Response{Content: []llm.Block{{Type: "tool_use", ID: "late", Name: "create_file", Input: []byte(`{"path":"late.txt","content":"must not write"}`)}}}, nil
+}
+
+func TestCancelledModelResponseCannotWrite(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	d := t.TempDir()
+	r := Loop{C: config.Load(), LLM: cancelledResponseClient{cancel}, Tools: tools.Runner{Root: d, MaxFile: 1024}}.Execute(ctx, Input{Task: "x"})
+	if r.Status != "failed" || r.AgentSteps != 1 {
+		t.Fatalf("%+v", r)
+	}
+	if _, err := os.Stat(filepath.Join(d, "late.txt")); !os.IsNotExist(err) {
+		t.Fatalf("late write: %v", err)
+	}
+}

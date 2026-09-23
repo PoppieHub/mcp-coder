@@ -28,3 +28,20 @@ func TestCancelWithoutTask(t *testing.T) {
 		t.Fatal("cancelled absent task")
 	}
 }
+
+func TestTaskTimeoutSettings(t *testing.T) {
+	m := New(config.Load())
+	valid := 120000
+	v, err := m.Update(Settings{TaskTimeoutMs: &valid})
+	if err != nil || v.TaskTimeoutMs != valid || m.Snapshot().TaskTimeout != 2*time.Minute {
+		t.Fatalf("view=%+v err=%v", v, err)
+	}
+	for _, invalid := range []int{0, 999, 3600001} {
+		if _, err := m.Update(Settings{Model: "should not apply", TaskTimeoutMs: &invalid}); err == nil {
+			t.Fatal("accepted invalid timeout", invalid)
+		}
+		if m.Settings() != v {
+			t.Fatal("invalid update changed settings")
+		}
+	}
+}

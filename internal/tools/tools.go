@@ -46,7 +46,7 @@ func (r Runner) search(ctx context.Context, args []string, q string) (string, er
 		c.Stdout = &b
 		c.Stderr = io.Discard
 		e = c.Run()
-		if e != nil && c.ProcessState.ExitCode() != 1 {
+		if e != nil && (c.ProcessState == nil || c.ProcessState.ExitCode() != 1) {
 			return "", e
 		}
 		return trunc(filterSecretLines(b.String(), args), r.MaxOutput), nil
@@ -54,6 +54,9 @@ func (r Runner) search(ctx context.Context, args []string, q string) (string, er
 	var out []string
 	codeSearch := len(args) > 0 && args[0] == "-n"
 	e := filepath.WalkDir(r.Root, func(p string, d os.DirEntry, e error) error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		if e != nil {
 			return nil
 		}

@@ -14,6 +14,7 @@ import (
 )
 
 type Settings struct {
+	TaskTimeoutMs    *int   `json:"taskTimeoutMs,omitempty"`
 	Model            string `json:"model,omitempty"`
 	BaseURL          string `json:"baseUrl,omitempty"`
 	Token            string `json:"-"`
@@ -22,9 +23,9 @@ type Settings struct {
 	CommandTimeoutMs *int   `json:"commandTimeoutMs,omitempty"`
 }
 type SettingsView struct {
-	Model, BaseURL                                    string
-	TokenConfigured                                   bool
-	MaxAgentSteps, RequestTimeoutMs, CommandTimeoutMs int
+	Model, BaseURL                                                   string
+	TokenConfigured                                                  bool
+	MaxAgentSteps, RequestTimeoutMs, CommandTimeoutMs, TaskTimeoutMs int
 }
 type Task struct {
 	ID, Phase                string
@@ -59,7 +60,7 @@ func New(c config.Config) *Manager         { return &Manager{c: c} }
 func (m *Manager) Settings() SettingsView  { m.mu.RLock(); defer m.mu.RUnlock(); return view(m.c) }
 func (m *Manager) Snapshot() config.Config { m.mu.RLock(); defer m.mu.RUnlock(); return m.c }
 func view(c config.Config) SettingsView {
-	return SettingsView{Model: c.Model, BaseURL: c.BaseURL, TokenConfigured: c.Token != "", MaxAgentSteps: c.MaxSteps, RequestTimeoutMs: int(c.RequestTimeout / time.Millisecond), CommandTimeoutMs: int(c.CommandTimeout / time.Millisecond)}
+	return SettingsView{TaskTimeoutMs: int(c.TaskTimeout / time.Millisecond), Model: c.Model, BaseURL: c.BaseURL, TokenConfigured: c.Token != "", MaxAgentSteps: c.MaxSteps, RequestTimeoutMs: int(c.RequestTimeout / time.Millisecond), CommandTimeoutMs: int(c.CommandTimeout / time.Millisecond)}
 }
 func (m *Manager) Update(s Settings) (SettingsView, error) {
 	m.mu.Lock()
@@ -92,6 +93,12 @@ func (m *Manager) Update(s Settings) (SettingsView, error) {
 		}
 		n.CommandTimeout = time.Duration(*s.CommandTimeoutMs) * time.Millisecond
 	}
+	if s.TaskTimeoutMs != nil {
+		if *s.TaskTimeoutMs < 1000 || *s.TaskTimeoutMs > 3600000 {
+			return SettingsView{}, fmt.Errorf("taskTimeoutMs должен быть от 1000 до 3600000")
+		}
+		n.TaskTimeout = time.Duration(*s.TaskTimeoutMs) * time.Millisecond
+	}
 	m.c = n
 	return view(n), nil
 }
@@ -104,6 +111,7 @@ func (m *Manager) Execute(ctx context.Context, in agent.Input) (agent.Result, er
 	snapshot := m.c
 	id := fmt.Sprintf("task-%d", time.Now().UnixNano())
 	taskCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	m.active = &active{id: id, started: time.Now(), phase: "starting", max: snapshot.MaxSteps, cancel: cancel}
 	m.mu.Unlock()
 	defer func() {

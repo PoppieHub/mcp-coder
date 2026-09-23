@@ -11,7 +11,7 @@ import (
 	"net/http"
 )
 
-const instructions = "mcp-coder — лёгкий исполнитель coding-задач. Делегируйте execute_coding_task чётко определённую реализацию, bugfix, тесты, локальный refactor, boilerplate или исследование репозитория. Он сам выполняет ограниченный цикл read/search/edit/verification и возвращает только компактный результат. Архитектуру, неоднозначные решения, security review и финальный review diff оставляйте основной модели. ask_coder — недорогой инструмент только для чтения, объяснений и анализа."
+const instructions = "mcp-coder — исполнитель для экономии токенов основной модели: пишет код, документацию и тесты по подготовленному заданию. Передавайте в execute_coding_task конкретный результат, suggestedFiles, allowedChangePaths, критерии приёмки и краткий projectContext с уже найденными фактами. Объединяйте связанные правки в одну задачу. Не поручайте повторную разведку, если файлы и изменения уже известны. Для документации и точных механических замен без требуемой проверки явно задавайте requireVerification:false; для кода и тестов указывайте одну узкую релевантную verification. Архитектуру, неоднозначные решения и итоговый review оставляйте основной модели. Результат компактный; подробные чтения и правки исполнитель делает сам. ask_coder — короткий read-only вопрос без изменений."
 
 type Ask struct {
 	Question      string   `json:"question" jsonschema:"read-only question"`
@@ -22,7 +22,7 @@ type Ask struct {
 func Run(ctx context.Context, c config.Config) error {
 	manager := runtime.New(c)
 	s := mcp.NewServer(&mcp.Implementation{Name: "mcp-coder", Version: "0.1.0"}, &mcp.ServerOptions{Instructions: instructions})
-	mcp.AddTool(s, &mcp.Tool{Name: "execute_coding_task", Description: "Делегировать ограниченную coding-задачу исполнителю."}, func(ctx context.Context, _ *mcp.CallToolRequest, in agent.Input) (*mcp.CallToolResult, agent.Result, error) {
+	mcp.AddTool(s, &mcp.Tool{Name: "execute_coding_task", Description: "Написать код, документацию или тесты по конкретному заданию и списку файлов; вернуть компактный результат."}, func(ctx context.Context, _ *mcp.CallToolRequest, in agent.Input) (*mcp.CallToolResult, agent.Result, error) {
 		result, err := manager.Execute(ctx, in)
 		return nil, result, err
 	})
