@@ -69,7 +69,7 @@ func (e CodingExecutor) ExecuteCodingTask(ctx context.Context, in agent.Input) (
 	} else if ctx.Err() != nil {
 		r.Status, r.Summary = "failed", ctx.Err().Error()
 	}
-	if r.Status == "completed" || r.Status == "ready_for_review" || r.Status == "awaiting_approval" {
+	if r.Status == "completed" {
 		events.Emit(e.Events, events.TaskCompleted, taskID, "задача выполнена")
 	} else {
 		events.Emit(e.Events, events.TaskFailed, taskID, r.Summary)

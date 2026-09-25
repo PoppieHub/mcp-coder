@@ -22,6 +22,9 @@ Complete with finalize as the only call on its step. Report only actual changedF
 
 const maxExplorationSteps = 3
 
+// Diff возвращается в каждом ответе, чтобы оркестратор видел изменения без собственного чтения.
+const diffLimit = 6000
+
 type Input struct {
 	Task                string   `json:"task"`
 	WorkspaceRoot       string   `json:"workspaceRoot,omitempty"`
@@ -33,8 +36,6 @@ type Input struct {
 	RequireChanges      *bool    `json:"requireChanges,omitempty"`
 	RequireVerification *bool    `json:"requireVerification,omitempty"`
 	AllowedChangePaths  []string `json:"allowedChangePaths,omitempty"`
-	HumanReview         bool     `json:"humanReview,omitempty"`
-	ApprovedPlan        string   `json:"approvedPlan,omitempty"`
 }
 
 func (in Input) changesRequired() bool {
@@ -59,12 +60,6 @@ type finalization struct {
 	ChangedFiles []string `json:"changedFiles"`
 	Verification []string `json:"verification"`
 }
-type proposal struct {
-	Plan         string   `json:"plan"`
-	PlannedFiles []string `json:"plannedFiles"`
-	Verification []string `json:"verification"`
-	Risks        []string `json:"risks"`
-}
 type Result struct {
 	Status                   string         `json:"status"`
 	Model                    string         `json:"model"`
@@ -76,8 +71,6 @@ type Result struct {
 	Warnings                 []string       `json:"warnings"`
 	ConventionsUsed          []string       `json:"conventionsUsed"`
 	Usage                    llm.Usage      `json:"usage"`
-	Plan                     *proposal      `json:"plan,omitempty"`
-	ReviewRequired           bool           `json:"reviewRequired,omitempty"`
 	Diff                     string         `json:"diff,omitempty"`
 }
 type Loop struct {
@@ -90,20 +83,23 @@ type Loop struct {
 	TaskID      string
 }
 
-func toolDefs(planOnly bool) []llm.Tool {
+func readFileSchema(p map[string]any) map[string]any {
+	props := p["properties"].(map[string]any)
+	props["offset"] = map[string]any{"type": "integer", "description": "1-based first line; omit to start at the beginning."}
+	props["limit"] = map[string]any{"type": "integer", "description": "Number of lines to read; omit to read until the size budget is spent."}
+	return p
+}
+func toolDefs() []llm.Tool {
 	s := func(n, d string, p map[string]any) llm.Tool { return llm.Tool{Name: n, Description: d, InputSchema: p} }
 	str := func(required ...string) map[string]any {
 		return map[string]any{"type": "object", "properties": map[string]any{"path": map[string]any{"type": "string"}, "query": map[string]any{"type": "string"}, "old_text": map[string]any{"type": "string"}, "new_text": map[string]any{"type": "string"}}, "required": required}
 	}
-	readTools := []llm.Tool{s("list_files", "List repository files.", str()), s("search_files", "Find file names.", str("query")), s("search_code", "Search code text.", str("query")), s("read_file", "Read one safe file.", str("path")), s("get_git_diff", "Show bounded diff.", map[string]any{"type": "object"}), s("get_git_status", "Show status.", map[string]any{"type": "object"})}
-	if planOnly {
-		return append(readTools, s("propose_plan", "Return a concise implementation plan for human approval. This is the only way to finish planning; no files may be changed.", map[string]any{"type": "object", "properties": map[string]any{"plan": map[string]any{"type": "string"}, "plannedFiles": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "verification": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "risks": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}}, "required": []string{"plan", "plannedFiles", "verification"}}))
-	}
+	readTools := []llm.Tool{s("list_files", "List repository files.", str()), s("search_files", "Find file names.", str("query")), s("search_code", "Search code text.", str("query")), s("read_file", "Read one safe file, whole or by line window. offset is the 1-based first line, limit the number of lines; a truncated result reports the offset to continue from.", readFileSchema(str("path"))), s("get_git_diff", "Show bounded diff.", map[string]any{"type": "object"}), s("get_git_status", "Show status.", map[string]any{"type": "object"})}
 	return append(readTools, s("edit_file", "Exact safe text replacement.", str("path", "old_text", "new_text")), s("apply_patch", "Restricted exact replacement patch.", str("path", "old_text", "new_text")), s("create_file", "Create one new safe file; fails if it already exists.", func() map[string]any {
 		p := str("path", "content")
 		p["properties"].(map[string]any)["content"] = map[string]any{"type": "string"}
 		return p
-	}()), s("run_go_test", "Run go test for one safe relative package, for example ./internal/tools or ./... .", map[string]any{"type": "object", "properties": map[string]any{"package": map[string]any{"type": "string"}}, "required": []string{"package"}}), s("run_verification", "Run an allowlisted verification command.", map[string]any{"type": "object", "properties": map[string]any{"args": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}}, "required": []string{"args"}}), s("finalize", "Finish only after the requested work is complete. Report a concise Russian summary, the changed files, and successful verification commands.", map[string]any{"type": "object", "properties": map[string]any{"summary": map[string]any{"type": "string"}, "changedFiles": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "verification": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}}, "required": []string{"summary", "changedFiles", "verification"}}))
+	}()), s("run_go_test", "Run go test for one safe relative package, for example ./internal/tools or ./... . Non-Go projects use run_verification instead.", map[string]any{"type": "object", "properties": map[string]any{"package": map[string]any{"type": "string"}}, "required": []string{"package"}}), s("run_verification", "Run a verification command the repository declares itself: a script from its package.json (npm/pnpm/yarn/bun run <script>), a Makefile/justfile/Taskfile target, or a toolchain command (go test|vet, cargo test|clippy, pytest, tox). Extra arguments may only be paths inside the workspace.", map[string]any{"type": "object", "properties": map[string]any{"args": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}}, "required": []string{"args"}}), s("finalize", "Finish only after the requested work is complete. Report a concise Russian summary, the changed files, and successful verification commands.", map[string]any{"type": "object", "properties": map[string]any{"summary": map[string]any{"type": "string"}, "changedFiles": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}, "verification": map[string]any{"type": "array", "items": map[string]any{"type": "string"}}}, "required": []string{"summary", "changedFiles", "verification"}}))
 }
 func (l Loop) Execute(ctx context.Context, in Input) (r Result) {
 	r = Result{Status: "failed", Model: l.C.Model, PreExistingModifiedFiles: l.PreExisting, ConventionsUsed: l.Project.Labels()}
@@ -111,14 +107,7 @@ func (l Loop) Execute(ctx context.Context, in Input) (r Result) {
 		r.Summary = "задача отсутствует или превышает допустимый размер"
 		return r
 	}
-	planOnly := in.HumanReview && strings.TrimSpace(in.ApprovedPlan) == ""
-	approval := "not required"
-	if planOnly {
-		approval = "human approval required: inspect only and finish with propose_plan"
-	} else if in.HumanReview {
-		approval = "human approved this plan; stay within it: " + in.ApprovedPlan
-	}
-	msgs := []llm.Message{{Role: "user", Content: fmt.Sprintf("Task: %s\nConstraints: %s\nOrchestrator context: %s\nSuggested files: %s\nVerification: %s\nCompletion contract: require changes=%t; require successful verification=%t; allowed change paths=%s\nHuman review: %s\nApplicable project context:%s", in.Task, strings.Join(in.Constraints, "; "), in.ProjectContext, strings.Join(in.SuggestedFiles, ", "), in.Verification, in.changesRequired(), in.verificationRequired(), strings.Join(in.AllowedChangePaths, ", "), approval, l.Project.Prompt())}}
+	msgs := []llm.Message{{Role: "user", Content: fmt.Sprintf("Task: %s\nConstraints: %s\nOrchestrator context: %s\nSuggested files: %s\nVerification: %s\nCompletion contract: require changes=%t; require successful verification=%t; allowed change paths=%s\nApplicable project context:%s", in.Task, strings.Join(in.Constraints, "; "), in.ProjectContext, strings.Join(in.SuggestedFiles, ", "), in.Verification, in.changesRequired(), in.verificationRequired(), strings.Join(in.AllowedChangePaths, ", "), l.Project.Prompt())}}
 	seen := map[string]bool{}
 	defer func() { r.ChangedFiles = mapKeys(seen) }()
 	explorationSteps := 0
@@ -129,7 +118,7 @@ func (l Loop) Execute(ctx context.Context, in Input) (r Result) {
 			r.AgentSteps = step - 1
 			return r
 		}
-		out, e := l.LLM.Message(ctx, llm.Request{System: system, MaxTokens: l.C.MaxOutputTokens, Messages: msgs, Tools: toolDefs(planOnly)})
+		out, e := l.LLM.Message(ctx, llm.Request{System: system, MaxTokens: l.C.MaxOutputTokens, Messages: msgs, Tools: toolDefs()})
 		u := llm.Usage{LLMRequests: 1}
 		if out.Usage != nil {
 			u = *out.Usage
@@ -166,19 +155,6 @@ func (l Loop) Execute(ctx context.Context, in Input) (r Result) {
 			msgs = append(msgs, llm.Message{Role: "assistant", Content: out.Content}, llm.Message{Role: "user", Content: "ОШИБКА: нельзя завершать задачу обычным текстом. Вызови finalize после выполнения и проверок."})
 			continue
 		}
-		if planOnly {
-			if len(calls) != 1 || calls[0].Name != "propose_plan" {
-				msgs = append(msgs, llm.Message{Role: "assistant", Content: out.Content}, llm.Message{Role: "user", Content: "ОШИБКА: в режиме human review заверши планирование единственным вызовом propose_plan."})
-				continue
-			}
-			var p proposal
-			if err := json.Unmarshal(calls[0].Input, &p); err != nil || strings.TrimSpace(p.Plan) == "" {
-				msgs = append(msgs, llm.Message{Role: "assistant", Content: out.Content}, llm.Message{Role: "user", Content: "ОШИБКА: propose_plan должен содержать непустой план."})
-				continue
-			}
-			r.Status, r.Plan, r.Summary = "awaiting_approval", &p, "План готов к одобрению; файловые изменения не выполнялись."
-			return r
-		}
 		finalizeSeen := false
 		recovery := ""
 		for _, call := range calls {
@@ -205,10 +181,9 @@ func (l Loop) Execute(ctx context.Context, in Input) (r Result) {
 				r.Summary = "выполнено"
 			}
 			r.ChangedFiles = mapKeys(seen)
-			if in.HumanReview {
-				r.Status, r.ReviewRequired = "ready_for_review", true
+			if len(seen) > 0 {
 				if diff, err := l.Tools.Git(ctx, "diff", "--"); err == nil {
-					r.Diff = diff
+					r.Diff = truncate(diff, diffLimit)
 				}
 			}
 			return r
@@ -279,6 +254,7 @@ func (l Loop) call(ctx context.Context, b llm.Block) (string, string, Verificati
 		return "ОШИБКА: некорректные аргументы инструмента", "", Verification{}
 	}
 	str := func(k string) string { var s string; _ = json.Unmarshal(a[k], &s); return s }
+	num := func(k string) int { var n int; _ = json.Unmarshal(a[k], &n); return n }
 	switch b.Name {
 	case "list_files":
 		x, e := l.Tools.ListFiles(ctx, str("query"))
@@ -290,7 +266,7 @@ func (l Loop) call(ctx context.Context, b llm.Block) (string, string, Verificati
 		x, e := l.Tools.SearchCode(ctx, str("query"))
 		return errText(x, e), "", Verification{}
 	case "read_file":
-		x, e := l.Tools.ReadFile(str("path"))
+		x, e := l.Tools.ReadFile(str("path"), num("offset"), num("limit"))
 		return errText(x, e), "", Verification{}
 	case "edit_file", "apply_patch":
 		x, e := l.Tools.EditFile(str("path"), str("old_text"), str("new_text"))

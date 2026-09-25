@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestReadAndEditLimits(t *testing.T) {
@@ -16,8 +17,8 @@ func TestReadAndEditLimits(t *testing.T) {
 		t.Fatal(e)
 	}
 	r := Runner{Root: d, MaxFile: 5, MaxOutput: 100, CommandTimeout: time.Second}
-	if _, e := r.ReadFile("a.txt"); e == nil {
-		t.Fatal("oversize read allowed")
+	if s, e := r.ReadFile("a.txt", 0, 0); e != nil || !strings.Contains(s, "продолжить: read_file с offset=") {
+		t.Fatal("oversize read must come back truncated", s, e)
 	}
 	r.MaxFile = 100
 	if _, e := r.EditFile("a.txt", "missing", "x"); e == nil {
@@ -26,7 +27,7 @@ func TestReadAndEditLimits(t *testing.T) {
 	if _, e := r.EditFile("a.txt", "world", "Go"); e != nil {
 		t.Fatal(e)
 	}
-	s, _ := r.ReadFile("a.txt")
+	s, _ := r.ReadFile("a.txt", 0, 0)
 	if s != "hello Go" {
 		t.Fatal(s)
 	}
@@ -151,5 +152,48 @@ func TestGofmtVerificationIsBoundedToSafeGoFiles(t *testing.T) {
 	}
 	if _, err := r.Verify(context.Background(), []string{"gofmt", "-w", "x.txt"}); err == nil {
 		t.Fatal("non-Go file allowed")
+	}
+}
+
+func TestReadFileLineWindow(t *testing.T) {
+	d := t.TempDir()
+	if e := os.WriteFile(filepath.Join(d, "big.md"), []byte("one\ntwo\nthree\nfour\nfive\n"), 0644); e != nil {
+		t.Fatal(e)
+	}
+	r := Runner{Root: d, MaxFile: 1000, MaxOutput: 100, CommandTimeout: time.Second}
+	got, e := r.ReadFile("big.md", 2, 2)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if !strings.HasPrefix(got, "two\nthree") {
+		t.Fatal(got)
+	}
+	if !strings.Contains(got, "offset=4") {
+		t.Fatal("window must report where to continue:", got)
+	}
+	tail, e := r.ReadFile("big.md", 4, 0)
+	if e != nil || tail != "four\nfive" {
+		t.Fatal(tail, e)
+	}
+	if _, e := r.ReadFile("big.md", 0, 0); e != nil {
+		t.Fatal(e)
+	}
+}
+
+func TestReadFileCutsAnOverlongLine(t *testing.T) {
+	d := t.TempDir()
+	if e := os.WriteFile(filepath.Join(d, "wide.md"), []byte(strings.Repeat("я", 40)+"\ntail\n"), 0644); e != nil {
+		t.Fatal(e)
+	}
+	r := Runner{Root: d, MaxFile: 21, MaxOutput: 100, CommandTimeout: time.Second}
+	got, e := r.ReadFile("wide.md", 0, 0)
+	if e != nil {
+		t.Fatal(e)
+	}
+	if !utf8.ValidString(strings.SplitN(got, "\n", 2)[0]) {
+		t.Fatal("cut must keep valid utf8:", got)
+	}
+	if !strings.Contains(got, "offset=2") {
+		t.Fatal("caller must be able to move past the cut line:", got)
 	}
 }

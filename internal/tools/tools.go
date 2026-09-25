@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type Runner struct {
@@ -19,6 +21,21 @@ type Runner struct {
 	CommandTimeout     time.Duration
 }
 
+func maxScanLine(maxFile int) int {
+	if maxFile < 1024*1024 {
+		return 1024 * 1024
+	}
+	return maxFile + 1
+}
+func cutRunes(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	for n > 0 && !utf8.RuneStart(s[n]) {
+		n--
+	}
+	return s[:n]
+}
 func trunc(s string, n int) string {
 	if len(s) > n {
 		return s[:n] + "\n[truncated]"
@@ -125,7 +142,11 @@ func filterSecretLines(out string, args []string) string {
 	}
 	return strings.Join(res, "\n")
 }
-func (r Runner) ReadFile(path string) (string, error) {
+
+// ReadFile returns whole small files and a bounded line window of larger ones. offset is the
+// 1-based first line, limit the number of lines; both may be zero. A window that stops short of
+// the end carries the offset to continue from, so a file above MaxFile stays readable in parts.
+func (r Runner) ReadFile(path string, offset, limit int) (string, error) {
 	p, e := security.ResolveSafePath(r.Root, path, false)
 	if e != nil {
 		return "", e
@@ -135,14 +156,49 @@ func (r Runner) ReadFile(path string) (string, error) {
 		return "", e
 	}
 	defer func() { _ = f.Close() }()
-	b, e := io.ReadAll(io.LimitReader(f, int64(r.MaxFile)+1))
-	if e != nil {
+	if offset < 1 {
+		offset = 1
+	}
+	sc := bufio.NewScanner(f)
+	sc.Buffer(make([]byte, 0, 64*1024), maxScanLine(r.MaxFile))
+	var b strings.Builder
+	line, last, truncated := 0, 0, false
+	for sc.Scan() {
+		line++
+		if line < offset {
+			continue
+		}
+		if limit > 0 && line >= offset+limit {
+			truncated = true
+			break
+		}
+		text := sc.Text()
+		if b.Len()+len(text)+1 > r.MaxFile {
+			// A single line wider than the budget is cut mid-line, otherwise the window would
+			// come back empty and the caller would ask for the same offset forever.
+			if b.Len() == 0 {
+				b.WriteString(cutRunes(text, r.MaxFile))
+				last = line
+			}
+			truncated = true
+			break
+		}
+		if b.Len() > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(text)
+		last = line
+	}
+	if e = sc.Err(); e != nil {
+		if e == bufio.ErrTooLong {
+			return "", fmt.Errorf("строка %d длиннее допустимого размера чтения", line+1)
+		}
 		return "", e
 	}
-	if len(b) > r.MaxFile {
-		return "", fmt.Errorf("файл превышает допустимый размер")
+	if !truncated {
+		return b.String(), nil
 	}
-	return string(b), nil
+	return b.String() + fmt.Sprintf("\n[показаны строки %d-%d; продолжить: read_file с offset=%d]", offset, last, last+1), nil
 }
 func (r Runner) EditFile(path, old, new string) (string, error) {
 	p, e := security.ResolveSafePath(r.Root, path, true)
@@ -216,7 +272,7 @@ func (r Runner) Verify(ctx context.Context, args []string) (string, error) {
 				return "", err
 			}
 		}
-	} else if e := security.ValidateVerification(args); e != nil {
+	} else if e := security.ValidateVerification(r.Root, args); e != nil {
 		return "", e
 	}
 	cctx, cancel := context.WithTimeout(ctx, r.CommandTimeout)

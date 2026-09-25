@@ -19,6 +19,8 @@
         "MCP_LLM_BASE_URL": "${user_config.base_url}",
         "MCP_LLM_MODEL": "${user_config.model}",
         "MCP_MAX_AGENT_STEPS": "${user_config.max_agent_steps}",
+        "MCP_MAX_INPUT_CHARS": "${user_config.max_input_chars}",
+        "MCP_MAX_FILE_CHARS": "${user_config.max_file_chars}",
         "MCP_MAX_TOTAL_CONTEXT_CHARS": "${user_config.max_total_context_chars}",
         "MCP_MAX_OUTPUT_TOKENS": "${user_config.max_output_tokens}",
         "MCP_REQUEST_TIMEOUT_MS": "${user_config.request_timeout_ms}",
@@ -61,6 +63,22 @@
       "default": 48,
       "min": 1,
       "max": 50
+    },
+    "max_input_chars": {
+      "type": "number",
+      "title": "Maximum task characters",
+      "description": "Longest task or question accepted from the orchestrator.",
+      "default": 40000,
+      "min": 256,
+      "max": 100000
+    },
+    "max_file_chars": {
+      "type": "number",
+      "title": "Maximum characters per file read",
+      "description": "Size of one read_file response; larger files come back as line windows.",
+      "default": 120000,
+      "min": 1024,
+      "max": 200000
     },
     "max_total_context_chars": {
       "type": "number",

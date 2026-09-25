@@ -6,6 +6,7 @@ import (
 	"github.com/wb/mcp-coder/internal/llm"
 	"github.com/wb/mcp-coder/internal/tools"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -58,40 +59,6 @@ func TestAgentPromptsAfterThreeExplorationSteps(t *testing.T) {
 	}
 	if !prompted {
 		t.Fatal("missing exploration recovery prompt")
-	}
-}
-
-func TestHumanReviewReturnsPlanWithoutChanges(t *testing.T) {
-	f := &scriptedLLM{responses: []llm.Response{
-		{Content: []llm.Block{{Type: "tool_use", ID: "plan", Name: "propose_plan", Input: []byte(`{"plan":"1. Добавить тест. 2. Исправить код.","plannedFiles":["x.go","x_test.go"],"verification":["go test ./..."],"risks":[]}`)}}},
-	}}
-	c := config.Load()
-	c.Model, c.MaxSteps, c.MaxInputChars, c.MaxOutputTokens = "x", 2, 100, 100
-	d := t.TempDir()
-	r := Loop{C: c, LLM: f, Tools: tools.Runner{Root: d, MaxOutput: 100}}.Execute(context.Background(), Input{Task: "x", HumanReview: true})
-	if r.Status != "awaiting_approval" || r.Plan == nil || len(r.Plan.PlannedFiles) != 2 || r.AgentSteps != 1 {
-		t.Fatalf("%+v", r)
-	}
-	if _, err := os.Stat(filepath.Join(d, "x.go")); !os.IsNotExist(err) {
-		t.Fatalf("plan mode changed a file: %v", err)
-	}
-	if got := f.requests[0].Tools; len(got) == 0 || got[len(got)-1].Name != "propose_plan" {
-		t.Fatalf("planning tools: %+v", got)
-	}
-}
-func TestHumanReviewPlanningRejectsWriteToolWithoutAwaitingApproval(t *testing.T) {
-	d := t.TempDir()
-	f := &scriptedLLM{responses: []llm.Response{
-		{Content: []llm.Block{{Type: "tool_use", ID: "1", Name: "create_file", Input: []byte(`{"path":"x.go","content":"package x\n"}`)}}},
-	}}
-	c := config.Load()
-	c.Model, c.MaxSteps, c.MaxInputChars, c.MaxOutputTokens = "x", 2, 100, 100
-	r := Loop{C: c, LLM: f, Tools: tools.Runner{Root: d, MaxOutput: 100}}.Execute(context.Background(), Input{Task: "x", HumanReview: true})
-	if r.Status != "failed" {
-		t.Fatalf("humanReview planning must reject a write tool: %+v", r)
-	}
-	if _, err := os.Stat(filepath.Join(d, "x.go")); !os.IsNotExist(err) {
-		t.Fatalf("humanReview planning changed a file: %v", err)
 	}
 }
 
@@ -193,5 +160,43 @@ func TestCancelledModelResponseCannotWrite(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(d, "late.txt")); !os.IsNotExist(err) {
 		t.Fatalf("late write: %v", err)
+	}
+}
+
+func TestFinalizeReturnsDiffOfChangedFiles(t *testing.T) {
+	d := t.TempDir()
+	for _, args := range [][]string{{"init"}, {"config", "user.email", "t@example.com"}, {"config", "user.name", "t"}} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = d
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(d, "a.txt"), []byte("before\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"add", "a.txt"}, {"commit", "-m", "init"}} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = d
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+
+	f := &scriptedLLM{responses: []llm.Response{
+		{Content: []llm.Block{{Type: "tool_use", ID: "1", Name: "edit_file", Input: []byte(`{"path":"a.txt","old_text":"before","new_text":"after"}`)}}},
+		{Content: []llm.Block{{Type: "tool_use", ID: "2", Name: "finalize", Input: []byte(`{"summary":"готово","changedFiles":["a.txt"],"verification":[]}`)}}},
+	}}
+	c := config.Load()
+	c.Model, c.MaxSteps, c.MaxInputChars, c.MaxOutputTokens = "x", 4, 100, 100
+	requireVerification := false
+	r := Loop{C: c, LLM: f, Tools: tools.Runner{Root: d, MaxFile: 1000, MaxOutput: 4000}}.
+		Execute(context.Background(), Input{Task: "x", RequireVerification: &requireVerification})
+
+	if r.Status != "completed" {
+		t.Fatalf("%+v", r)
+	}
+	if !strings.Contains(r.Diff, "-before") || !strings.Contains(r.Diff, "+after") {
+		t.Fatalf("diff must describe the change: %q", r.Diff)
 	}
 }
