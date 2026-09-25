@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"github.com/wb/mcp-coder/internal/config"
 	"github.com/wb/mcp-coder/internal/events"
@@ -304,11 +305,17 @@ func (l Loop) call(ctx context.Context, b llm.Block, checked map[string]verifyRe
 func (l Loop) verify(ctx context.Context, checked map[string]verifyResult, args []string, name string) (string, string, Verification) {
 	if cached, ok := checked[name]; ok {
 		if cached.failed {
-			return "ОШИБКА: проверка " + name + " уже падала на текущем состоянии файлов; повторный запуск пропущен, сначала внеси правку\n" + cached.out, "", Verification{}
+			return "ОШИБКА: проверка " + name + " уже падала на текущем состоянии файлов, повторный запуск даст тот же результат\n" + cached.out, "", Verification{}
 		}
 		return cached.out + "\n[проверка " + name + " уже пройдена на текущем состоянии файлов; повторный запуск пропущен]", "", Verification{}
 	}
 	x, e := l.Tools.Verify(ctx, args)
+	// Отклонённая allowlist'ом команда не выполнялась: это ошибка формы вызова, а не результат
+	// проверки, поэтому агент вправе сразу попробовать правильную форму.
+	var rejected tools.Rejected
+	if errors.As(e, &rejected) {
+		return errText(x, e), "", Verification{}
+	}
 	v := Verification{Name: name, Status: "passed"}
 	if e != nil {
 		v.Status = "failed"

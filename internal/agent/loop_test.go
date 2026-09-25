@@ -116,19 +116,37 @@ func TestAgentFinalizesOnlyAfterObservedChangeAndVerification(t *testing.T) {
 }
 
 func TestVerifyCachesResultUntilFilesChange(t *testing.T) {
-	l := Loop{Tools: tools.Runner{Root: t.TempDir(), MaxOutput: 200, CommandTimeout: time.Second}}
+	d := t.TempDir()
+	if err := os.WriteFile(filepath.Join(d, "broken.go"), []byte("package x\nfunc (\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	l := Loop{Tools: tools.Runner{Root: d, MaxOutput: 400, CommandTimeout: 10 * time.Second}}
 	checked := map[string]verifyResult{}
-	_, _, first := l.verify(context.Background(), checked, []string{"curl", "x"}, "curl x")
-	repeated, _, second := l.verify(context.Background(), checked, []string{"curl", "x"}, "curl x")
+	args, name := []string{"gofmt", "-w", "broken.go"}, "gofmt -w broken.go"
+	_, _, first := l.verify(context.Background(), checked, args, name)
+	repeated, _, second := l.verify(context.Background(), checked, args, name)
 	if first.Status != "failed" || second.Name != "" {
 		t.Fatalf("%+v %+v", first, second)
 	}
-	if !strings.HasPrefix(repeated, "ОШИБКА:") || !strings.Contains(repeated, "повторный запуск пропущен") {
+	if !strings.HasPrefix(repeated, "ОШИБКА:") || !strings.Contains(repeated, "тот же результат") {
 		t.Fatal(repeated)
 	}
 	clear(checked)
-	if _, _, again := l.verify(context.Background(), checked, []string{"curl", "x"}, "curl x"); again.Name == "" {
+	if _, _, again := l.verify(context.Background(), checked, args, name); again.Name == "" {
 		t.Fatal("проверка не перезапущена после сброса кеша")
+	}
+}
+
+func TestRejectedCommandIsNeitherCachedNorReportedAsCheck(t *testing.T) {
+	l := Loop{Tools: tools.Runner{Root: t.TempDir(), MaxOutput: 200, CommandTimeout: time.Second}}
+	checked := map[string]verifyResult{}
+	first, _, v1 := l.verify(context.Background(), checked, []string{"curl", "x"}, "curl x")
+	second, _, v2 := l.verify(context.Background(), checked, []string{"curl", "x"}, "curl x")
+	if v1.Name != "" || v2.Name != "" || len(checked) != 0 {
+		t.Fatalf("%+v %+v %v", v1, v2, checked)
+	}
+	if first != second || strings.Contains(second, "тот же результат") {
+		t.Fatalf("%q -> %q", first, second)
 	}
 }
 

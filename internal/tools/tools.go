@@ -259,21 +259,29 @@ func (r Runner) Git(ctx context.Context, args ...string) (string, error) {
 	e := c.Run()
 	return trunc(b.String(), r.MaxOutput), e
 }
+
+// Rejected отличает отклонённую команду от упавшей: она не запускалась, поэтому её результат
+// нельзя ни кешировать, ни записывать как выполненную проверку.
+type Rejected struct{ Err error }
+
+func (r Rejected) Error() string { return r.Err.Error() }
+func (r Rejected) Unwrap() error { return r.Err }
+
 func (r Runner) Verify(ctx context.Context, args []string) (string, error) {
 	if len(args) >= 3 && args[0] == "gofmt" {
 		if args[1] != "-w" {
-			return "", fmt.Errorf("gofmt разрешён только с аргументом -w")
+			return "", Rejected{fmt.Errorf("gofmt разрешён только с аргументом -w")}
 		}
 		for _, path := range args[2:] {
 			if !strings.HasSuffix(path, ".go") {
-				return "", fmt.Errorf("gofmt разрешён только для .go файлов")
+				return "", Rejected{fmt.Errorf("gofmt разрешён только для .go файлов")}
 			}
 			if _, err := security.ResolveSafePath(r.Root, path, false); err != nil {
-				return "", err
+				return "", Rejected{err}
 			}
 		}
 	} else if e := security.ValidateVerification(r.Root, args); e != nil {
-		return "", e
+		return "", Rejected{e}
 	}
 	cctx, cancel := context.WithTimeout(ctx, r.CommandTimeout)
 	defer cancel()
