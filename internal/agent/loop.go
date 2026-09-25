@@ -55,6 +55,10 @@ type Verification struct {
 	Name   string `json:"name"`
 	Status string `json:"status"`
 }
+type verifyResult struct {
+	out    string
+	failed bool
+}
 type finalization struct {
 	Summary      string   `json:"summary"`
 	ChangedFiles []string `json:"changedFiles"`
@@ -110,6 +114,7 @@ func (l Loop) Execute(ctx context.Context, in Input) (r Result) {
 	msgs := []llm.Message{{Role: "user", Content: fmt.Sprintf("Task: %s\nConstraints: %s\nOrchestrator context: %s\nSuggested files: %s\nVerification: %s\nCompletion contract: require changes=%t; require successful verification=%t; allowed change paths=%s\nApplicable project context:%s", in.Task, strings.Join(in.Constraints, "; "), in.ProjectContext, strings.Join(in.SuggestedFiles, ", "), in.Verification, in.changesRequired(), in.verificationRequired(), strings.Join(in.AllowedChangePaths, ", "), l.Project.Prompt())}}
 	seen := map[string]bool{}
 	defer func() { r.ChangedFiles = mapKeys(seen) }()
+	checked := map[string]verifyResult{}
 	explorationSteps := 0
 	for step := 1; step <= l.C.MaxSteps; step++ {
 		events.Emit(l.Events, events.AgentStepStarted, l.TaskID, fmt.Sprintf("шаг агента %d", step))
@@ -204,11 +209,13 @@ func (l Loop) Execute(ctx context.Context, in Input) (r Result) {
 			if call.Name == "run_verification" || call.Name == "run_go_test" {
 				events.Emit(l.Events, events.VerificationStarted, l.TaskID, "запуск проверки")
 			}
-			res, changed, ver := l.call(ctx, call)
+			res, changed, ver := l.call(ctx, call, checked)
 			events.Emit(l.Events, events.ToolCompleted, l.TaskID, call.Name)
 			if changed != "" && !strings.HasPrefix(res, "ОШИБКА:") {
 				seen[changed] = true
 				madeProgress = true
+				// Правка делает прошлые результаты проверок неактуальными: следующий запуск снова реальный.
+				clear(checked)
 				events.Emit(l.Events, events.FileChanged, l.TaskID, changed)
 			}
 			if ver.Name != "" {
@@ -248,7 +255,7 @@ func mapKeys(m map[string]bool) []string {
 	}
 	return o
 }
-func (l Loop) call(ctx context.Context, b llm.Block) (string, string, Verification) {
+func (l Loop) call(ctx context.Context, b llm.Block, checked map[string]verifyResult) (string, string, Verification) {
 	var a map[string]json.RawMessage
 	if e := json.Unmarshal(b.Input, &a); e != nil {
 		return "ОШИБКА: некорректные аргументы инструмента", "", Verification{}
@@ -283,23 +290,31 @@ func (l Loop) call(ctx context.Context, b llm.Block) (string, string, Verificati
 	case "run_verification":
 		var args []string
 		_ = json.Unmarshal(a["args"], &args)
-		x, e := l.Tools.Verify(ctx, args)
-		v := Verification{Name: strings.Join(args, " "), Status: "passed"}
-		if e != nil {
-			v.Status = "failed"
-		}
-		return errText(x, e), "", v
+		return l.verify(ctx, checked, args, strings.Join(args, " "))
 	case "run_go_test":
 		pkg := str("package")
-		x, e := l.Tools.Verify(ctx, []string{"go", "test", pkg})
-		v := Verification{Name: "go test " + pkg, Status: "passed"}
-		if e != nil {
-			v.Status = "failed"
-		}
-		return errText(x, e), "", v
+		return l.verify(ctx, checked, []string{"go", "test", pkg}, "go test "+pkg)
 	default:
 		return "ОШИБКА: неизвестный инструмент", "", Verification{}
 	}
+}
+
+// Результат проверки на неизменившихся файлах не меняется, а модель склонна перезапускать одну и ту
+// же команду: повтор отдаётся из кеша, не занимает минуты и не дублирует запись в verification.
+func (l Loop) verify(ctx context.Context, checked map[string]verifyResult, args []string, name string) (string, string, Verification) {
+	if cached, ok := checked[name]; ok {
+		if cached.failed {
+			return "ОШИБКА: проверка " + name + " уже падала на текущем состоянии файлов; повторный запуск пропущен, сначала внеси правку\n" + cached.out, "", Verification{}
+		}
+		return cached.out + "\n[проверка " + name + " уже пройдена на текущем состоянии файлов; повторный запуск пропущен]", "", Verification{}
+	}
+	x, e := l.Tools.Verify(ctx, args)
+	v := Verification{Name: name, Status: "passed"}
+	if e != nil {
+		v.Status = "failed"
+	}
+	checked[name] = verifyResult{out: x, failed: e != nil}
+	return errText(x, e), "", v
 }
 func (l Loop) audit(ctx context.Context, in Input, seen map[string]bool, checks []Verification, f finalization) error {
 	if in.changesRequired() && len(seen) == 0 {

@@ -3,6 +3,7 @@ package security
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -89,5 +90,54 @@ func TestVerificationAllowsToolchainCommandsWithSafePaths(t *testing.T) {
 		if err := ValidateVerification(d, args); err == nil {
 			t.Fatalf("%v allowed", args)
 		}
+	}
+}
+
+func TestVerificationSuggestsFullCommandForBareScriptName(t *testing.T) {
+	d := t.TempDir()
+	writeFile(t, d, "package.json", `{"scripts":{"verify":"tsc --noEmit","test":"rstest"}}`)
+	for args, want := range map[string]string{"verify": "npm run verify", "run verify": "npm run verify"} {
+		err := ValidateVerification(d, strings.Fields(args))
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Fatalf("%q: %v", args, err)
+		}
+	}
+	if err := ValidateVerification(d, []string{"deploy"}); err == nil || strings.Contains(err.Error(), "выполните") {
+		t.Fatalf("undeclared script suggested: %v", err)
+	}
+}
+
+func TestSuggestedCommandFollowsThePackageManagerOfTheProject(t *testing.T) {
+	for _, c := range []struct{ marker, content, want string }{
+		{"pnpm-lock.yaml", "lockfileVersion: 9\n", "pnpm run verify"},
+		{"yarn.lock", "", "yarn run verify"},
+		{"bun.lock", "", "bun run verify"},
+	} {
+		d := t.TempDir()
+		writeFile(t, d, "package.json", `{"scripts":{"verify":"tsc --noEmit"}}`)
+		writeFile(t, d, c.marker, c.content)
+		err := ValidateVerification(d, []string{"verify"})
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Fatalf("%s: %v", c.marker, err)
+		}
+	}
+	d := t.TempDir()
+	writeFile(t, d, "package.json", `{"packageManager":"yarn@4.5.0","scripts":{"verify":"tsc --noEmit"}}`)
+	writeFile(t, d, "pnpm-lock.yaml", "lockfileVersion: 9\n")
+	if err := ValidateVerification(d, []string{"verify"}); err == nil || !strings.Contains(err.Error(), "yarn run verify") {
+		t.Fatalf("packageManager ignored: %v", err)
+	}
+}
+
+func TestSuggestedCommandCoversRepositoryTargets(t *testing.T) {
+	d := t.TempDir()
+	writeFile(t, d, "Makefile", "lint:\n\tgolangci-lint run\n")
+	if err := ValidateVerification(d, []string{"lint"}); err == nil || !strings.Contains(err.Error(), "make lint") {
+		t.Fatalf("%v", err)
+	}
+	j := t.TempDir()
+	writeFile(t, j, "justfile", "check:\n\tgo vet ./...\n")
+	if err := ValidateVerification(j, []string{"check"}); err == nil || !strings.Contains(err.Error(), "just check") {
+		t.Fatalf("%v", err)
 	}
 }

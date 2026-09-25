@@ -44,7 +44,54 @@ func ValidateVerification(root string, args []string) error {
 	if subcommands, ok := toolchainCommands[args[0]]; ok {
 		return validateToolchain(root, args, subcommands)
 	}
+	if full := suggestRunner(root, args); full != "" {
+		return fmt.Errorf("команда %q не запускается напрямую: выполните %q", strings.Join(args, " "), full)
+	}
 	return fmt.Errorf("команда %q не разрешена: запускайте проверки скриптом проекта (npm/pnpm/yarn/bun run, make, just, task) или штатной командой тулчейна (go, cargo, pytest, tox)", args[0])
+}
+
+// Имя скрипта без раннера («verify», «run verify») — частая ошибка вызывающего: манифест знает,
+// кому это имя принадлежит, поэтому отказ сразу называет полную команду и не тратит шаг на угадывание.
+func suggestRunner(root string, args []string) string {
+	name := args[0]
+	rest := args[1:]
+	if (name == "run" || name == "run-script") && len(rest) > 0 {
+		name, rest = rest[0], rest[1:]
+	}
+	if names, _, err := packageScripts(root); err == nil && names[name] {
+		return strings.Join(append([]string{packageManager(root), "run", name}, rest...), " ")
+	}
+	for _, runner := range []struct {
+		command  string
+		declared func(string) (map[string]bool, string, error)
+	}{{"make", makeTargets}, {"just", justRecipes}, {"task", taskNames}} {
+		if names, _, err := runner.declared(root); err == nil && names[name] {
+			return strings.Join(append([]string{runner.command, name}, rest...), " ")
+		}
+	}
+	return ""
+}
+
+// Локфайл выбирает пакетный менеджер, чтобы подсказка соответствовала стеку проекта, а не npm по умолчанию.
+var lockfiles = []struct{ file, manager string }{{"pnpm-lock.yaml", "pnpm"}, {"yarn.lock", "yarn"}, {"bun.lockb", "bun"}, {"bun.lock", "bun"}}
+
+func packageManager(root string) string {
+	if raw, err := os.ReadFile(filepath.Join(root, "package.json")); err == nil {
+		var manifest struct {
+			PackageManager string `json:"packageManager"`
+		}
+		if json.Unmarshal(raw, &manifest) == nil {
+			if name, _, _ := strings.Cut(manifest.PackageManager, "@"); manifestRunners[name] != nil {
+				return name
+			}
+		}
+	}
+	for _, lock := range lockfiles {
+		if _, err := os.Stat(filepath.Join(root, lock.file)); err == nil {
+			return lock.manager
+		}
+	}
+	return "npm"
 }
 
 func validateManifestRunner(root string, args []string, declared func(root string) (map[string]bool, string, error)) error {

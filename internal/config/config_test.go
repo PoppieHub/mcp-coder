@@ -30,7 +30,7 @@ func TestInvalidLimitsUseDefaults(t *testing.T) {
 	t.Setenv("MCP_MAX_TOTAL_CONTEXT_CHARS", "invalid")
 	t.Setenv("MCP_MAX_OUTPUT_TOKENS", "0")
 	c := Load()
-	if c.MaxSteps != 48 || c.MaxTotalContextChars != 160000 || c.MaxOutputTokens != 3000 {
+	if c.MaxSteps != 24 || c.MaxTotalContextChars != 160000 || c.MaxOutputTokens != 3000 {
 		t.Fatalf("unexpected defaults: %+v", c)
 	}
 }

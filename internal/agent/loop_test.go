@@ -115,6 +115,50 @@ func TestAgentFinalizesOnlyAfterObservedChangeAndVerification(t *testing.T) {
 	}
 }
 
+func TestVerifyCachesResultUntilFilesChange(t *testing.T) {
+	l := Loop{Tools: tools.Runner{Root: t.TempDir(), MaxOutput: 200, CommandTimeout: time.Second}}
+	checked := map[string]verifyResult{}
+	_, _, first := l.verify(context.Background(), checked, []string{"curl", "x"}, "curl x")
+	repeated, _, second := l.verify(context.Background(), checked, []string{"curl", "x"}, "curl x")
+	if first.Status != "failed" || second.Name != "" {
+		t.Fatalf("%+v %+v", first, second)
+	}
+	if !strings.HasPrefix(repeated, "ОШИБКА:") || !strings.Contains(repeated, "повторный запуск пропущен") {
+		t.Fatal(repeated)
+	}
+	clear(checked)
+	if _, _, again := l.verify(context.Background(), checked, []string{"curl", "x"}, "curl x"); again.Name == "" {
+		t.Fatal("проверка не перезапущена после сброса кеша")
+	}
+}
+
+func TestRepeatedVerificationIsReportedOnceAndRerunAfterEdit(t *testing.T) {
+	d := t.TempDir()
+	if err := os.WriteFile(filepath.Join(d, "go.mod"), []byte("module example.test/check\n\ngo 1.27\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	c := config.Load()
+	c.Model, c.MaxSteps, c.MaxInputChars, c.MaxOutputTokens, c.CommandTimeout = "x", 6, 100, 100, 30*time.Second
+	run := func(extra ...llm.Response) Result {
+		responses := append([]llm.Response{
+			{Content: []llm.Block{{Type: "tool_use", ID: "1", Name: "create_file", Input: []byte(`{"path":"x.go","content":"package check\n"}`)}}},
+			{Content: []llm.Block{{Type: "tool_use", ID: "2", Name: "run_go_test", Input: []byte(`{"package":"./..."}`)}}},
+		}, extra...)
+		responses = append(responses, llm.Response{Content: []llm.Block{{Type: "tool_use", ID: "9", Name: "finalize", Input: []byte(`{"summary":"готово","changedFiles":["x.go"],"verification":["go test ./..."]}`)}}})
+		return Loop{C: c, LLM: &scriptedLLM{responses: responses}, Tools: tools.Runner{Root: d, MaxFile: 1024, MaxOutput: 400, CommandTimeout: 30 * time.Second}}.Execute(context.Background(), Input{Task: "x"})
+	}
+
+	repeat := llm.Response{Content: []llm.Block{{Type: "tool_use", ID: "3", Name: "run_go_test", Input: []byte(`{"package":"./..."}`)}}}
+	if r := run(repeat); r.Status != "completed" || len(r.Verification) != 1 {
+		t.Fatalf("повтор проверки без правок попал в результат: %+v", r)
+	}
+
+	edit := llm.Response{Content: []llm.Block{{Type: "tool_use", ID: "3", Name: "edit_file", Input: []byte(`{"path":"x.go","old_text":"package check","new_text":"package check // touched"}`)}}}
+	if r := run(edit, repeat); r.Status != "completed" || len(r.Verification) != 2 {
+		t.Fatalf("проверка после правки не перезапущена: %+v", r)
+	}
+}
+
 func TestAgentRejectsChangesOutsideAllowedPaths(t *testing.T) {
 	d := t.TempDir()
 	f := &scriptedLLM{responses: []llm.Response{
@@ -137,7 +181,7 @@ func TestAgentRejectsInvalidTaskAndUnknownTool(t *testing.T) {
 	if r.Status != "failed" || r.AgentSteps != 0 {
 		t.Fatalf("%+v", r)
 	}
-	res, _, _ := (Loop{}).call(context.Background(), llm.Block{Name: "unknown", Input: []byte(`{}`)})
+	res, _, _ := (Loop{}).call(context.Background(), llm.Block{Name: "unknown", Input: []byte(`{}`)}, map[string]verifyResult{})
 	if !strings.HasPrefix(res, "ОШИБКА:") {
 		t.Fatal(res)
 	}

@@ -2,22 +2,28 @@ package mcpserver
 
 import (
 	"context"
+	"fmt"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/wb/mcp-coder/internal/agent"
 	"github.com/wb/mcp-coder/internal/config"
 	"github.com/wb/mcp-coder/internal/core"
 	"github.com/wb/mcp-coder/internal/llm"
 	"github.com/wb/mcp-coder/internal/runtime"
+	"github.com/wb/mcp-coder/internal/tools"
+	"github.com/wb/mcp-coder/internal/workspace"
 	"net/http"
+	"strings"
 )
 
-const instructions = "mcp-coder — исполнитель для экономии токенов основной модели: пишет код, документацию и тесты по подготовленному заданию. Передавайте в execute_coding_task конкретный результат, suggestedFiles, allowedChangePaths, критерии приёмки и краткий projectContext с уже найденными фактами. Объединяйте связанные правки в одну задачу. Не поручайте повторную разведку, если файлы и изменения уже известны. Для документации и точных механических замен без требуемой проверки явно задавайте requireVerification:false; для кода и тестов указывайте одну узкую релевантную verification. Архитектуру, неоднозначные решения и итоговый review оставляйте основной модели. В verification передавайте команду, объявленную самим репозиторием (скрипт package.json, цель Makefile/justfile/Taskfile или штатную команду тулчейна); аргументы — только пути внутри workspace. Успешный результат возвращает diff изменённых файлов. Результат компактный; подробные чтения и правки исполнитель делает сам. ask_coder — короткий read-only вопрос без изменений."
+const instructions = "mcp-coder — исполнитель для экономии токенов основной модели: пишет код, документацию и тесты по подготовленному заданию. Передавайте в execute_coding_task конкретный результат, suggestedFiles, allowedChangePaths, критерии приёмки и краткий projectContext с уже найденными фактами. Объединяйте связанные правки в одну задачу. Не поручайте повторную разведку, если файлы и изменения уже известны. Для документации и точных механических замен без требуемой проверки явно задавайте requireVerification:false; для кода и тестов указывайте одну узкую релевантную verification. Архитектуру, неоднозначные решения и итоговый review оставляйте основной модели. В verification передавайте команду, объявленную самим репозиторием (скрипт package.json, цель Makefile/justfile/Taskfile или штатную команду тулчейна); аргументы — только пути внутри workspace. Успешный результат возвращает diff изменённых файлов. Результат компактный; подробные чтения и правки исполнитель делает сам. ask_coder — короткий read-only вопрос без изменений: пути в files читаются из workspace и прикладываются к вопросу, большой файл приходит усечённым окном."
 
 type Ask struct {
 	Question      string   `json:"question" jsonschema:"read-only question"`
 	WorkspaceRoot string   `json:"workspaceRoot,omitempty"`
 	Files         []string `json:"files,omitempty"`
 }
+
+const askFileLimit = 10
 
 func Run(ctx context.Context, c config.Config) error {
 	manager := runtime.New(c)
@@ -51,7 +57,7 @@ func Run(ctx context.Context, c config.Config) error {
 		out, err := manager.Diagnostics(context.Background(), in.API)
 		return nil, out, err
 	})
-	mcp.AddTool(s, &mcp.Tool{Name: "ask_coder", Description: "Задать модели короткий вопрос без изменений workspace."}, func(ctx context.Context, _ *mcp.CallToolRequest, in Ask) (*mcp.CallToolResult, map[string]string, error) {
+	mcp.AddTool(s, &mcp.Tool{Name: "ask_coder", Description: "Задать модели короткий вопрос без изменений workspace; файлы из files читаются и прикладываются к вопросу."}, func(ctx context.Context, _ *mcp.CallToolRequest, in Ask) (*mcp.CallToolResult, map[string]string, error) {
 		current := manager.Snapshot()
 		if e := current.ValidateLLM(); e != nil {
 			return nil, map[string]string{"status": "failed", "summary": e.Error()}, nil
@@ -59,7 +65,12 @@ func Run(ctx context.Context, c config.Config) error {
 		if len(in.Question) == 0 || len(in.Question) > current.MaxInputChars {
 			return nil, map[string]string{"status": "failed", "summary": "вопрос отсутствует или слишком велик"}, nil
 		}
-		out, e := (&llm.HTTPClient{C: current, HTTP: &http.Client{Timeout: current.RequestTimeout}}).Message(ctx, llm.Request{System: "You are a concise read-only coding assistant. Do not claim to edit files.", MaxTokens: current.MaxOutputTokens, Messages: []llm.Message{{Role: "user", Content: in.Question}}})
+		root, e := workspace.Resolve(in.WorkspaceRoot)
+		if e != nil {
+			return nil, map[string]string{"status": "failed", "summary": e.Error()}, nil
+		}
+		attached, warnings := attachFiles(current, root, in.Files)
+		out, e := (&llm.HTTPClient{C: current, HTTP: &http.Client{Timeout: current.RequestTimeout}}).Message(ctx, llm.Request{System: "You are a concise read-only coding assistant. Answer from the attached file contents when they are present; a file may arrive as a truncated window. Do not claim to edit files or to read anything that was not attached.", MaxTokens: current.MaxOutputTokens, Messages: []llm.Message{{Role: "user", Content: attached + in.Question}}})
 		if e != nil {
 			return nil, map[string]string{"status": "failed", "summary": e.Error()}, nil
 		}
@@ -67,9 +78,45 @@ func Run(ctx context.Context, c config.Config) error {
 		for _, b := range out.Content {
 			text += b.Text
 		}
-		return nil, map[string]string{"status": "completed", "model": current.Model, "answer": text}, nil
+		answer := map[string]string{"status": "completed", "model": current.Model, "answer": text}
+		if len(warnings) > 0 {
+			answer["warnings"] = strings.Join(warnings, "; ")
+		}
+		return nil, answer, nil
 	})
 	return s.Run(ctx, &mcp.StdioTransport{})
+}
+
+// Файлы вопроса читаются тем же безопасным путём, что и в задаче: ask_coder остаётся одним
+// запросом к модели, поэтому содержимое прикладывается сразу, а не добывается инструментами.
+func attachFiles(c config.Config, root string, files []string) (string, []string) {
+	if len(files) == 0 {
+		return "", nil
+	}
+	var warnings []string
+	if len(files) > askFileLimit {
+		warnings = append(warnings, fmt.Sprintf("приложены первые %d файлов из %d", askFileLimit, len(files)))
+		files = files[:askFileLimit]
+	}
+	runner := tools.Runner{Root: root, MaxFile: c.MaxFileChars, MaxOutput: c.MaxFileChars}
+	budget := c.MaxTotalContextChars / 2
+	var b strings.Builder
+	for _, path := range files {
+		text, err := runner.ReadFile(path, 0, 0)
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("%s: %s", path, err))
+			continue
+		}
+		if b.Len()+len(text) > budget {
+			warnings = append(warnings, fmt.Sprintf("%s: не приложен, исчерпан бюджет контекста", path))
+			continue
+		}
+		b.WriteString(fmt.Sprintf("--- %s ---\n%s\n\n", path, text))
+	}
+	if b.Len() == 0 {
+		return "", warnings
+	}
+	return "Attached files:\n" + b.String() + "Question: ", warnings
 }
 func execute(ctx context.Context, c config.Config, in agent.Input) agent.Result {
 	r, _ := core.CodingExecutor{Config: c}.ExecuteCodingTask(ctx, in)
