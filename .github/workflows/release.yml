@@ -1,0 +1,119 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - run: go test ./...
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+            format: tar.gz
+          - goos: linux
+            goarch: arm64
+            format: tar.gz
+          - goos: darwin
+            goarch: amd64
+            format: tar.gz
+          - goos: darwin
+            goarch: arm64
+            format: tar.gz
+          - goos: windows
+            goarch: amd64
+            format: zip
+          - goos: windows
+            goarch: arm64
+            format: zip
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build release archive
+        shell: bash
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          FORMAT: ${{ matrix.format }}
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          package="mcp-coder_${version}_${GOOS}_${GOARCH}"
+          mkdir -p "dist/${package}"
+          binary="mcp-coder"
+          if [[ "${GOOS}" == "windows" ]]; then
+            binary="mcp-coder.exe"
+          fi
+          CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o "dist/${package}/${binary}" ./cmd/mcp-coder
+          cp README.md LICENSE "dist/${package}/"
+          if [[ "${FORMAT}" == "zip" ]]; then
+            (cd dist && zip -r "${package}.zip" "${package}")
+          else
+            tar -C dist -czf "dist/${package}.tar.gz" "${package}"
+          fi
+      - uses: actions/upload-artifact@v7
+        with:
+          name: mcp-coder-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/mcp-coder_*.${{ matrix.format }}
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Create checksums
+        run: |
+          cd artifacts
+          sha256sum mcp-coder_* > SHA256SUMS
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="release-notes/${GITHUB_REF_NAME}.md"
+          if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            gh release upload "${GITHUB_REF_NAME}" artifacts/* \
+              --repo "${GITHUB_REPOSITORY}" \
+              --clobber
+            if [[ -f "${notes}" ]]; then
+              gh release edit "${GITHUB_REF_NAME}" \
+                --repo "${GITHUB_REPOSITORY}" \
+                --title "mcp-coder ${GITHUB_REF_NAME}" \
+                --notes-file "${notes}"
+            fi
+          elif [[ -f "${notes}" ]]; then
+            gh release create "${GITHUB_REF_NAME}" artifacts/* \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "mcp-coder ${GITHUB_REF_NAME}" \
+              --notes-file "${notes}"
+          else
+            gh release create "${GITHUB_REF_NAME}" artifacts/* \
+              --repo "${GITHUB_REPOSITORY}" \
+              --title "mcp-coder ${GITHUB_REF_NAME}" \
+              --generate-notes
+          fi

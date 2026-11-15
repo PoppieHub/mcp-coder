@@ -1,0 +1,49 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+)
+
+type Config struct {
+	Token                                                                        string
+	BaseURL                                                                      string
+	Model                                                                        string
+	MaxSteps, MaxInputChars, MaxFileChars, MaxTotalContextChars, MaxOutputTokens int
+	RequestTimeout, CommandTimeout, TaskTimeout                                  time.Duration
+	// PromptCache adds cache_control markers; a gateway that rejects them automatically switches to uncached mode.
+	PromptCache bool
+	// MaxParallelTasks is the number of tasks that may run concurrently; excess tasks are rejected immediately.
+	MaxParallelTasks int
+}
+
+// MaxParallelTasksLimit is the upper bound for MCP_MAX_PARALLEL_TASKS and update_settings.
+const MaxParallelTasksLimit = 8
+
+func Load() Config {
+	return Config{
+		Token: os.Getenv("MCP_LLM_TOKEN"), BaseURL: strings.TrimRight(os.Getenv("MCP_LLM_BASE_URL"), "/"), Model: os.Getenv("MCP_LLM_MODEL"),
+		MaxSteps: envInt("MCP_MAX_AGENT_STEPS", 32, 1, 50), MaxInputChars: envInt("MCP_MAX_INPUT_CHARS", 12000, 256, 100000),
+		MaxFileChars: envInt("MCP_MAX_FILE_CHARS", 24000, 1024, 200000), MaxTotalContextChars: envInt("MCP_MAX_TOTAL_CONTEXT_CHARS", 160000, 4096, 1000000),
+		TaskTimeout:      time.Duration(envInt("MCP_TASK_TIMEOUT_MS", 600000, 1000, 3600000)) * time.Millisecond,
+		PromptCache:      os.Getenv("MCP_PROMPT_CACHE") != "false",
+		MaxParallelTasks: envInt("MCP_MAX_PARALLEL_TASKS", 2, 1, MaxParallelTasksLimit),
+		MaxOutputTokens:  envInt("MCP_MAX_OUTPUT_TOKENS", 3000, 128, 16000), RequestTimeout: time.Duration(envInt("MCP_REQUEST_TIMEOUT_MS", 60000, 1000, 600000)) * time.Millisecond, CommandTimeout: time.Duration(envInt("MCP_COMMAND_TIMEOUT_MS", 60000, 1000, 600000)) * time.Millisecond,
+	}
+}
+func (c Config) ValidateLLM() error {
+	if c.Token == "" || c.BaseURL == "" || c.Model == "" {
+		return fmt.Errorf("MCP_LLM_TOKEN, MCP_LLM_BASE_URL and MCP_LLM_MODEL must be set")
+	}
+	return nil
+}
+func envInt(k string, d, min, max int) int {
+	n, e := strconv.Atoi(os.Getenv(k))
+	if e != nil || n < min || n > max {
+		return d
+	}
+	return n
+}
