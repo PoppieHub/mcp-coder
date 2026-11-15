@@ -8,6 +8,8 @@
 - **Price:** $12 one-time
 - **Category:** Agents & Orchestration
 - **Tags:** `mcp`, `coding-agent`, `codex`, `claude-code`, `cursor`, `delegation`, `testing`, `developer-tools`
+- **Logo:** `assets/mcp-coder-delegator-logo.png`
+- **Creator avatar:** `assets/poppiehub-avatar.png`
 
 ## Short description
 
