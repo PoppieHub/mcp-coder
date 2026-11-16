@@ -11,7 +11,7 @@ Tool names may be namespaced by the host. Match them by their final name, such a
 
 ## Prerequisite
 
-This skill requires the `mcp-coder` MCP server and its tools. If they are unavailable, say that the server must be installed and configured; do not imitate tool calls or claim delegation occurred. Use the setup section in [references/playbook.md](references/playbook.md) only when installation or configuration is the blocker.
+This skill requires the `mcp-coder` MCP server and its tools. If they are unavailable, say that the server must be installed and configured; do not imitate tool calls or claim delegation occurred. Read [references/setup.md](references/setup.md) only when installation, host configuration, or connection diagnostics are needed.
 
 ## Decide what to delegate
 
@@ -42,7 +42,7 @@ Do not send vague instructions such as “fix it,” “improve the code,” or 
 
 For documentation-only changes or exact mechanical replacements that genuinely need no executable check, set `requireVerification` to `false` explicitly. Do not disable verification merely to avoid a failing check.
 
-See [references/playbook.md](references/playbook.md) for contract examples, task partitioning, and recovery patterns when the first run does not complete.
+Read [references/recipes.md](references/recipes.md) when a concrete contract template would save time. Read [references/playbook.md](references/playbook.md) for task partitioning and recovery decisions.
 
 ## Execute
 
@@ -65,7 +65,7 @@ Treat worker output as a candidate change, not proof of completion.
 2. Inspect the diff against the user's request, repository rules, allowed scope, and unintended behavior.
 3. Confirm every affected module has an appropriate successful check. Run or request any missing high-value validation.
 4. If the result is `needs_clarification`, answer the underlying question yourself when possible, then send a narrower follow-up task.
-5. If the result is `failed`, use the concrete failure to make one targeted retry. Do not repeat an unchanged task or loop blindly.
+5. If the result is `failed`, use the concrete failure to make one targeted retry. Do not repeat an unchanged task or loop blindly. Read [references/troubleshooting.md](references/troubleshooting.md) when the failure is operational or its next action is unclear.
 6. Report completion only after the primary agent accepts the diff and verification evidence.
 
 ## User-facing handoff

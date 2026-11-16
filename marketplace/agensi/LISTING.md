@@ -57,10 +57,12 @@ That difference is where reliable delegation begins.
 ### Included
 
 - production-ready `SKILL.md` orchestration workflow;
+- pinned v0.1.0 setup for Claude Code, Codex, and other stdio MCP hosts;
 - decision rules for what should and should not be delegated;
-- contract patterns for bug fixes, tests, refactors, and documentation;
+- ready-to-adapt contracts for bug fixes, tests, refactors, documentation, and parallel work;
 - safe parallel-task partitioning rules;
 - failure and clarification recovery matrix;
+- operational troubleshooting matrix;
 - final-review checklist for diffs, warnings, and verification;
 - setup and credential-safety guidance.
 
@@ -115,3 +117,11 @@ Get mcp-coder v0.1.0: https://github.com/PoppieHub/mcp-coder/releases/tag/v0.1.0
 ## Pricing recommendation
 
 Launch at **$12 one-time**. Move to **$19** after the listing has reviews, a polished demo, and at least one documented workflow showing a real before-and-after result. Avoid a subscription until updates provide recurring value.
+
+## v1.1 changelog
+
+- Added pinned `mcp-coder` v0.1.0 installation and connection instructions.
+- Added host configuration examples for Claude Code, Codex, and generic stdio MCP clients.
+- Added six ready-to-adapt delegation contracts.
+- Added operational troubleshooting and safe diagnostic guidance.
+- Expanded parallel-task recovery and final acceptance checks.

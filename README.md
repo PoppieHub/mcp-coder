@@ -2,6 +2,10 @@
 
 A local stdio MCP server that delegates well-scoped coding, testing, and documentation tasks to a separate model. It works with any model whose API is compatible with Anthropic Messages. The primary model (Claude Code, Codex) plans and reviews; `mcp-coder` implements. This keeps implementation details out of the primary model's context and is designed to reduce its token usage. Total token usage across both models may be higher for small tasks.
 
+## Agent orchestration skill
+
+Want Claude Code, Codex, Cursor, or Copilot to turn requests into bounded worker contracts, parallelize only disjoint edits, and review verification before reporting success? [MCP Coder Delegator](https://www.agensi.io/skills/mcp-coder-delegator) packages that workflow as an installable premium skill.
+
 ## Installation
 
 Download a ready-to-run archive for macOS, Linux, or Windows from [GitHub Releases](https://github.com/PoppieHub/mcp-coder/releases), or build from source:
