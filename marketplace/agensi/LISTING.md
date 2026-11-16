@@ -21,7 +21,7 @@ Turn coding requests into tightly scoped mcp-coder tasks, run independent work i
 
 Your best coding agent should be making decisions—not repeatedly reading the same files, applying mechanical edits, rerunning tests, and carrying every intermediate tool result in its context.
 
-MCP Coder Delegator gives Claude Code, Codex, Cursor, Copilot, and other skill-aware agents a disciplined workflow for handing implementation work to the open-source `mcp-coder` server while keeping planning, judgment, and final review with the primary agent.
+MCP Coder Delegator gives Claude Code, Codex, Cursor, Copilot, and other skill-aware agents a disciplined workflow for handing implementation work to [`mcp-coder`](https://github.com/PoppieHub/mcp-coder) while keeping planning, judgment, and final review with the primary agent.
 
 Instead of sending a vague “fix this” prompt to a worker model, the skill builds a precise execution contract: the required outcome, relevant files, allowed write scope, known project facts, constraints, acceptance criteria, and the exact verification to run.
 
@@ -74,9 +74,9 @@ That difference is where reliable delegation begins.
 
 ### Requirements
 
-This skill is the orchestration layer for the free, open-source `mcp-coder` server. The server must already be installed and connected to the host agent, with access to an Anthropic Messages-compatible model endpoint.
+Install [`mcp-coder` v0.1.0](https://github.com/PoppieHub/mcp-coder/releases/tag/v0.1.0) and connect it to your coding agent with a compatible model endpoint. Then add this skill to give the agent the complete delegation and review workflow.
 
-The purchase does not include API credits, a hosted model, credentials, or the server binary.
+API usage is billed by your model endpoint provider.
 
 ### Built for developers who want leverage without giving up control
 
@@ -110,7 +110,7 @@ I built a skill that teaches Claude Code and Codex how to delegate implementatio
 
 MCP Coder Delegator creates bounded tasks, selects verification, runs independent edits in parallel, and makes the primary agent review the diff before declaring success.
 
-Built for the open-source mcp-coder MCP server.
+Get mcp-coder v0.1.0: https://github.com/PoppieHub/mcp-coder/releases/tag/v0.1.0
 
 ## Pricing recommendation
 

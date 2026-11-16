@@ -103,13 +103,13 @@ Start all safe tasks before waiting for the first. Waiting immediately after eac
 
 Use this only when the host agent cannot see the mcp-coder tools.
 
-The server source and current setup instructions are at:
+The matching server release and prebuilt archives are at:
+
+`https://github.com/PoppieHub/mcp-coder/releases/tag/v0.1.0`
+
+Source and additional setup instructions are at:
 
 `https://github.com/PoppieHub/mcp-coder`
-
-Prebuilt archives for macOS, Linux, and Windows are available at:
-
-`https://github.com/PoppieHub/mcp-coder/releases`
 
 It requires a model API compatible with Anthropic Messages and these environment variables:
 

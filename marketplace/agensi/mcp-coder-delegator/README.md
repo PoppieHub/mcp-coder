@@ -1,6 +1,6 @@
 # MCP Coder Delegator
 
-An orchestration skill for the open-source `mcp-coder` MCP server. It teaches a primary coding agent to turn implementation requests into bounded worker contracts, parallelize only disjoint edits, and review diffs and verification before reporting success.
+A premium orchestration skill for [`mcp-coder`](https://github.com/PoppieHub/mcp-coder). It teaches a primary coding agent to turn implementation requests into bounded worker contracts, parallelize only disjoint edits, and review diffs and verification before reporting success.
 
 ## Requirements
 
@@ -8,7 +8,7 @@ An orchestration skill for the open-source `mcp-coder` MCP server. It teaches a 
 - an Anthropic Messages-compatible model endpoint configured for `mcp-coder`
 - a coding agent that can load `SKILL.md` skills
 
-The server and setup instructions are available at `https://github.com/PoppieHub/mcp-coder`. Prebuilt archives are published at `https://github.com/PoppieHub/mcp-coder/releases`.
+Install the matching [`mcp-coder` v0.1.0 release](https://github.com/PoppieHub/mcp-coder/releases/tag/v0.1.0). Source and additional setup instructions are available in the [repository](https://github.com/PoppieHub/mcp-coder).
 
 ## Use
 
