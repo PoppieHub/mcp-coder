@@ -75,3 +75,20 @@ MCP Coder Delegator · $12 on Agensi
 **Description:** MCP Coder Delegator turns implementation requests into bounded mcp-coder contracts, parallelizes only disjoint edits, requires verification, and keeps final diff review with the primary coding agent.
 
 **CTA:** https://www.agensi.io/r/POPPIEHUB?to=/skills/mcp-coder-delegator&utm_source=demo
+
+## Verified demo run
+
+The storyboard is backed by a real two-task run against a disposable repository:
+
+- both tasks were started before either result was collected;
+- write scopes were disjoint: `backend/validate.js` and `frontend/empty-state.js`;
+- the executor changed only those two files and returned both diffs;
+- worker verification passed independently in both Node modules;
+- primary-agent verification was repeated after completion: 3 of 3 tests passed;
+- no warnings or out-of-scope changes were reported.
+
+Render the 31-second video from the checked-in artwork:
+
+```sh
+scripts/render-agensi-demo.sh
+```

@@ -6,6 +6,10 @@ A local stdio MCP server that delegates well-scoped coding, testing, and documen
 
 Want Claude Code, Codex, Cursor, or Copilot to turn requests into bounded worker contracts, parallelize only disjoint edits, and review verification before reporting success? [MCP Coder Delegator](https://www.agensi.io/r/POPPIEHUB?to=/skills/mcp-coder-delegator&utm_source=github) packages that workflow as an installable premium skill.
 
+[![MCP Coder Delegator: from request to review-ready result](marketplace/agensi/assets/mcp-coder-delegator-demo-poster.png)](marketplace/agensi/assets/mcp-coder-delegator-demo.mp4)
+
+The 31-second demo is backed by a real parallel run: two disjoint workstreams, no out-of-scope changes, two returned diffs, and a 3/3 primary-agent verification pass. [Get the orchestration skill on Agensi](https://www.agensi.io/r/POPPIEHUB?to=/skills/mcp-coder-delegator&utm_source=github_demo).
+
 ## Installation
 
 Download a ready-to-run archive for macOS, Linux, or Windows from [GitHub Releases](https://github.com/PoppieHub/mcp-coder/releases), or build from source:
