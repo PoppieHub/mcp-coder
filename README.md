@@ -4,7 +4,7 @@ A local stdio MCP server that delegates well-scoped coding, testing, and documen
 
 ## Agent orchestration skill
 
-Want Claude Code, Codex, Cursor, or Copilot to turn requests into bounded worker contracts, parallelize only disjoint edits, and review verification before reporting success? [MCP Coder Delegator](https://www.agensi.io/skills/mcp-coder-delegator) packages that workflow as an installable premium skill.
+Want Claude Code, Codex, Cursor, or Copilot to turn requests into bounded worker contracts, parallelize only disjoint edits, and review verification before reporting success? [MCP Coder Delegator](https://www.agensi.io/r/POPPIEHUB?to=/skills/mcp-coder-delegator&utm_source=github) packages that workflow as an installable premium skill.
 
 ## Installation
 

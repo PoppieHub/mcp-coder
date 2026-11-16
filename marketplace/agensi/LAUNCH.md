@@ -2,9 +2,9 @@
 
 ## Target
 
-Acquire the first legitimate paid order for:
+Acquire the first legitimate paid order through the attributed creator link:
 
-https://www.agensi.io/skills/mcp-coder-delegator
+https://www.agensi.io/r/POPPIEHUB?to=/skills/mcp-coder-delegator
 
 Do not self-purchase, manufacture reviews, or ask for an undisclosed fake testimonial. The first buyer should be a real mcp-coder or coding-agent user.
 
@@ -33,7 +33,7 @@ Hi Joeri,
 
 Thanks for reaching out about mcp-coder. I packaged the orchestration layer as MCP Coder Delegator and published it on Agensi:
 
-https://www.agensi.io/skills/mcp-coder-delegator
+https://www.agensi.io/r/POPPIEHUB?to=/skills/mcp-coder-delegator&utm_source=joeri
 
 The skill teaches Claude Code, Codex, Cursor, and other compatible agents how to turn implementation requests into bounded mcp-coder contracts, run only disjoint work in parallel, recover from failed verification, and keep final review with the primary agent.
 
@@ -50,7 +50,7 @@ It gives Claude Code, Codex, Cursor, and other SKILL.md-capable agents a repeata
 
 The v1.1 package includes setup for common MCP hosts, six task-contract recipes, and troubleshooting:
 
-https://www.agensi.io/skills/mcp-coder-delegator
+https://www.agensi.io/r/POPPIEHUB?to=/skills/mcp-coder-delegator&utm_source=creator_group
 
 Feedback from people already using coding-agent delegation is welcome.
 
@@ -62,7 +62,7 @@ It turns requests into bounded mcp-coder contracts, parallelizes only disjoint e
 
 Includes setup, six reusable task recipes, recovery rules, and troubleshooting:
 
-https://www.agensi.io/skills/mcp-coder-delegator
+https://www.agensi.io/r/POPPIEHUB?to=/skills/mcp-coder-delegator&utm_source=social
 
 ## GitHub release-note addition
 
@@ -70,7 +70,7 @@ https://www.agensi.io/skills/mcp-coder-delegator
 
 MCP Coder Delegator packages the recommended primary-agent workflow for mcp-coder: bounded task contracts, safe parallel scopes, verification, targeted recovery, and final diff review.
 
-https://www.agensi.io/skills/mcp-coder-delegator
+https://www.agensi.io/r/POPPIEHUB?to=/skills/mcp-coder-delegator&utm_source=github_release
 
 ## Conversion checkpoints
 
